@@ -3442,7 +3442,7 @@ type RatingOption = { value: number; emoji: string; label: string };
 
 const RATING_OPTIONS: RatingOption[] = [
   { value: 100, emoji: "😍", label: "非常滿意" },
-  { value: 70, emoji: "😊", label: "滿意" },
+  { value: 80, emoji: "😊", label: "滿意" },
   { value: 50, emoji: "😐", label: "普通" },
   { value: 20, emoji: "😕", label: "不滿意" },
   { value: 0, emoji: "😡", label: "非常不滿意" },
