@@ -15347,24 +15347,8 @@ import { useHandleServerEvent } from "./hooks/useHandleServerEvent";
 import { allAgentSets, defaultAgentSetKey } from "@/app/agentConfigs";
 import useAudioDownload from "./hooks/useAudioDownload";
 
-// ✅ 統一日誌角色型別（含 feedback）
+// ✅ 新增：統一日誌角色型別（含 feedback）
 type LogRole = "user" | "assistant" | "system" | "feedback";
-
-// ✅ 供應商/傳輸模式（合規）
-type ProviderMode = "openai" | "fallback";
-
-// ======== Browser TTS（fallback 用）========
-function speakWithBrowserTTS(text: string, autoplay: boolean) {
-  try {
-    if (!("speechSynthesis" in window)) return;
-    const utter = new SpeechSynthesisUtterance(text);
-    // 不指定 voice，交由瀏覽器最佳可用語音
-    if (autoplay) {
-      window.speechSynthesis.cancel();
-      window.speechSynthesis.speak(utter);
-    }
-  } catch {}
-}
 
 function AppContent() {
   const router = useRouter();
@@ -15387,18 +15371,16 @@ function AppContent() {
   const audioElement = useRef<HTMLAudioElement | null>(null);
   const [sessionStatus, setSessionStatus] = useState<SessionStatus>("DISCONNECTED");
 
-  // ⭐️ 新增：供應商模式（預設 openai）。?provider=fallback 可手動切換
-  const [providerMode, setProviderMode] = useState<ProviderMode>("openai");
-
-  // ⭐️ 本地評分（eventId -> 0/20/50/70/100）
+  // ⭐️ 本地記錄：每個 assistant 訊息的評分（eventId -> 0/20/50/70/100）
   const [ratingsByTargetId, setRatingsByTargetId] = useState<Record<string, number>>({});
 
+  // ⭐️ 送出評分：UI 顯示表情；後端收到數字
   function sendSatisfactionRating(targetEventId: string, rating: number) {
     const payloadContent = `[RATING] target=${targetEventId} value=${rating}`;
     const feedbackId = `feedback_${Date.now()}_${Math.random().toString(36).slice(2)}`;
     reallyPostLog({
       role: "feedback",
-      content: payloadContent,
+      content: payloadContent, // 後端只看數字與 target，表情只在 UI 顯示
       eventId: feedbackId,
       timestamp: Date.now(),
       rating,
@@ -15449,8 +15431,8 @@ function AppContent() {
       eventId?: string;
       pairId?: string;
       timestamp?: number;
-      rating?: number;
-      targetEventId?: string;
+      rating?: number;         // 可選：滿意度數字（0/20/50/70/100）
+      targetEventId?: string;  // 可選：被評分的 assistant 訊息 ID
     }>
   >([]);
 
@@ -15491,8 +15473,8 @@ function AppContent() {
     eventId?: string;
     pairId?: string;
     timestamp?: number;
-    rating?: number;
-    targetEventId?: string;
+    rating?: number;          // 可選
+    targetEventId?: string;   // 可選
   }) {
     const eventId = log.eventId || `${log.role}_${Date.now()}_${Math.random().toString(36).slice(2)}`;
     if (loggedEventIds.current.has(eventId)) {
@@ -15536,7 +15518,7 @@ function AppContent() {
     }
   }
 
-  // 保留原本的 postLog（用於系統訊息）
+  // 保留原本的 postLog（用於系統訊息）—型別也放寬到 LogRole
   function postLog(log: {
     role: LogRole;
     content: string;
@@ -15580,7 +15562,7 @@ function AppContent() {
     return () => window.removeEventListener("online", onOnline);
   }, [userId, sessionId]);
 
-  // 輔助：從 output 陣列提取文字
+  // 輔助函數：從 output 數組提取文字
   function extractTextFromOutput(output: any): string {
     let text = "";
     if (Array.isArray(output)) {
@@ -15604,13 +15586,9 @@ function AppContent() {
   }
 
   const sendClientEvent = (eventObj: any, eventNameSuffix = "") => {
-    if (dataChannel && (dataChannel as any).readyState === "open") {
+    if (dataChannel && dataChannel.readyState === "open") {
       logClientEvent(eventObj, eventNameSuffix);
-      try {
-        (dataChannel as any).send(JSON.stringify(eventObj));
-      } catch (e) {
-        logClientEvent({ error: String(e) }, "data_channel.send_error");
-      }
+      dataChannel.send(JSON.stringify(eventObj));
     } else {
       logClientEvent({ attemptedEvent: eventObj.type }, "error.data_channel_not_open");
       console.error("Failed to send message - no data channel available", eventObj);
@@ -15626,14 +15604,7 @@ function AppContent() {
     setIsOutputAudioBufferActive,
   });
 
-  // 讀 URL 參數（agent / provider）
   useEffect(() => {
-    // provider
-    const p = (searchParams.get("provider") || "").toLowerCase();
-    if (p === "fallback") setProviderMode("fallback");
-    else setProviderMode("openai");
-
-    // agent
     let finalAgentConfig = searchParams.get("agentConfig");
     if (!finalAgentConfig || !allAgentSets[finalAgentConfig]) {
       finalAgentConfig = defaultAgentSetKey;
@@ -15650,7 +15621,7 @@ function AppContent() {
     if (selectedAgentName && sessionStatus === "DISCONNECTED") {
       startSession();
     }
-  }, [selectedAgentName, providerMode]);
+  }, [selectedAgentName]);
 
   useEffect(() => {
     if (sessionStatus === "CONNECTED" && selectedAgentConfigSet && selectedAgentName) {
@@ -15664,51 +15635,39 @@ function AppContent() {
     }
   }, [isPTTActive]);
 
-  // ====== 啟動會話 ======
   async function startSession() {
     if (sessionStatus !== "DISCONNECTED") return;
-    await connectToProvider();
+    await connectToRealtime();
   }
 
-  async function connectToProvider() {
+  async function connectToRealtime() {
     setSessionStatus("CONNECTING");
-    if (providerMode === "openai") {
-      await connectToRealtimeOpenAI();
-    } else {
-      await connectToFallbackLocal();
-    }
-  }
-
-  // ====== 模式 A：OpenAI Realtime（合規直連）======
-  async function connectToRealtimeOpenAI() {
     try {
       logClientEvent({ url: "/api/session" }, "fetch_session_token_request");
       const tokenResponse = await fetch("/api/session");
       const data = await tokenResponse.json();
       logServerEvent(data, "fetch_session_token_response");
 
-      if (data?.userId) setUserId(data.userId);
-      if (data?.sessionId) setSessionId(data.sessionId);
+      if (data?.userId) {
+        setUserId(data.userId);
+        console.log("👤 User ID set:", data.userId.substring(0, 8) + "...");
+      }
+      if (data?.sessionId) {
+        setSessionId(data.sessionId);
+        console.log("🔗 Session ID set:", data.sessionId.substring(0, 8) + "...");
+      }
 
       if (!data.client_secret?.value) {
         logClientEvent(data, "error.no_ephemeral_key");
         console.error("No ephemeral key provided by the server");
         setSessionStatus("DISCONNECTED");
-        // 自動切到 fallback（合規，不繞過）
-        console.warn("Switching to fallback provider due to no ephemeral key.");
-        setProviderMode("fallback");
-        await connectToFallbackLocal();
         return;
       }
 
       const EPHEMERAL_KEY = data.client_secret.value;
 
-      // WebRTC
-      const pc = new RTCPeerConnection({
-        iceServers: [
-          { urls: ["stun:stun.l.google.com:19302"] }, // 合規公共 STUN
-        ],
-      });
+      // WebRTC 設置
+      const pc = new RTCPeerConnection();
       peerConnection.current = pc;
 
       audioElement.current = document.createElement("audio");
@@ -15740,18 +15699,213 @@ function AppContent() {
         logClientEvent({ error: err }, "data_channel.error");
       });
 
-      // ★★★ 伺服器事件（OpenAI） ★★★
+      // ★★★ 重構的事件處理邏輯 ★★★
       dc.addEventListener("message", (e: MessageEvent) => {
         const eventData: any = JSON.parse(e.data);
         handleServerEventRef.current(eventData);
 
         const eventType = String(eventData?.type || "");
+        console.log("📨 Event:", eventType);
 
-        // 監聽/顯示語音狀態
-        if (eventType === "input_audio_buffer.speech_started") setIsListening(true);
-        if (["input_audio_buffer.speech_stopped", "input_audio_buffer.committed"].includes(eventType)) setIsListening(false);
+        // 1️⃣ 用戶語音輸入完成
+        if (eventType === "conversation.item.input_audio_transcription.completed") {
+          const raw = eventData.transcript || eventData.text || "";
+          const normalized = raw && raw.trim() && raw.trim() !== "\n" ? raw.trim() : "[inaudible]";
+          const eventId = eventData.item_id || `speech_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
-        // 其他錯誤
+          console.log("🗣️ User speech completed:", normalized);
+
+          // 暫存用戶訊息，等待助手回應完成後一起記錄
+          conversationState.current.currentUserMessage = {
+            content: normalized,
+            eventId,
+            timestamp: Date.now()
+          };
+        }
+
+        // 1.1 補捉 item.created（語音轉錄）
+        if (eventType === "conversation.item.created") {
+          const item = eventData.item;
+          if (item?.role === "user" && Array.isArray(item.content)) {
+            const transcripts = item.content
+              .map((c: any) => c?.transcript)
+              .filter(Boolean) as string[];
+            const joined = transcripts.join("").trim();
+            if (joined && !conversationState.current.currentUserMessage) {
+              console.log("🗣️ User speech (created->transcript):", joined);
+              conversationState.current.currentUserMessage = {
+                content: joined,
+                eventId: item.id,
+                timestamp: Date.now()
+              };
+            }
+          }
+        }
+
+        // 1.2 STT 失敗記錄（系統訊息，直接記錄）
+        if (eventType === "conversation.item.input_audio_transcription.failed") {
+          const reason = eventData?.error || "unknown";
+          postLog({
+            role: "system",
+            content: `[STT FAILED] ${String(reason).slice(0, 200)}`,
+            eventId: eventData.item_id || `stt_fail_${Date.now()}`,
+          });
+        }
+
+        // 2️⃣ 助手回應開始
+        if (eventType === "response.created") {
+          const responseId = eventData.response?.id || eventData.id;
+          console.log("🤖 Assistant response started:", responseId);
+          conversationState.current.currentAssistantResponse = {
+            isActive: true,
+            responseId,
+            textBuffer: "",
+            audioTranscriptBuffer: "",
+            startTime: Date.now(),
+          };
+        }
+
+        // 3️⃣ 音頻轉錄增量
+        if (eventType === "response.audio_transcript.delta") {
+          const delta = eventData.delta || "";
+          if (delta && conversationState.current.currentAssistantResponse.isActive) {
+            conversationState.current.currentAssistantResponse.audioTranscriptBuffer += delta;
+            console.log(`🎵 Added audio transcript delta (${delta.length} chars)`);
+          }
+        }
+        if (eventType === "response.audio_transcript.done") {
+          const transcript = eventData.transcript || "";
+          if (transcript && conversationState.current.currentAssistantResponse.isActive) {
+            if (conversationState.current.currentAssistantResponse.audioTranscriptBuffer.length < transcript.length) {
+              conversationState.current.currentAssistantResponse.audioTranscriptBuffer = transcript;
+            }
+          }
+        }
+
+        // 4️⃣ 文字增量事件
+        const TEXT_DELTA_EVENTS = [
+          "response.text.delta",
+          "response.output_text.delta",
+          "output_text.delta",
+          "conversation.item.delta",
+        ];
+        if (TEXT_DELTA_EVENTS.some((ev) => eventType.includes(ev))) {
+          const delta = eventData.delta || eventData.text || "";
+          if (delta && conversationState.current.currentAssistantResponse.isActive) {
+            conversationState.current.currentAssistantResponse.textBuffer += delta;
+            console.log(`📝 Added text delta (${delta.length} chars)`);
+          }
+        }
+
+        // 5️⃣ 文字完成事件
+        const TEXT_DONE_EVENTS = ["response.text.done", "response.output_text.done", "output_text.done"];
+        if (TEXT_DONE_EVENTS.some((ev) => eventType.includes(ev))) {
+          const completedText = eventData.text || "";
+          if (completedText && conversationState.current.currentAssistantResponse.isActive) {
+            if (conversationState.current.currentAssistantResponse.textBuffer.length < completedText.length) {
+              console.log("🔄 Updating buffer with complete text");
+              conversationState.current.currentAssistantResponse.textBuffer = completedText;
+            }
+          }
+        }
+
+        // 6️⃣ 內容部分完成
+        if (eventType === "response.content_part.done") {
+          const part = eventData.part;
+          if (part?.type === "text" && part.text && conversationState.current.currentAssistantResponse.isActive) {
+            if (!conversationState.current.currentAssistantResponse.textBuffer) {
+              console.log("🆘 Using text from content_part.done as fallback");
+              conversationState.current.currentAssistantResponse.textBuffer = part.text;
+            }
+          }
+        }
+
+        // 7️⃣ 助手回應完成 - 配對記錄
+        const RESPONSE_DONE_EVENTS = ["response.done", "response.completed"];
+        if (RESPONSE_DONE_EVENTS.includes(eventType)) {
+          console.log("🏁 Assistant response completed");
+
+          const assistantResponse = conversationState.current.currentAssistantResponse;
+          let finalText = assistantResponse.textBuffer.trim();
+
+          // 文字提取 fallback 邏輯
+          if (!finalText) {
+            console.warn("⚠️ Text buffer empty, trying fallback extraction");
+            if (assistantResponse.audioTranscriptBuffer.trim()) {
+              finalText = assistantResponse.audioTranscriptBuffer.trim();
+              console.log("🎵 Using audio transcript as primary text");
+            }
+            if (!finalText) {
+              const response = eventData.response;
+              if (response?.output) {
+                finalText = extractTextFromOutput(response.output);
+                if (finalText) {
+                  console.log("📦 Extracted from response.output");
+                }
+              }
+            }
+            if (!finalText) {
+              finalText = (eventData.text || eventData.content || "").trim();
+              if (finalText) {
+                console.log("🔍 Extracted from event data");
+              }
+            }
+          }
+
+          if (finalText) {
+            const assistantMsg = {
+              content: finalText,
+              eventId: assistantResponse.responseId || eventData.response?.id || eventData.id || `assistant_${Date.now()}`,
+              timestamp: Date.now()
+            };
+
+            // 🌟 關鍵改動：配對記錄
+            if (conversationState.current.currentUserMessage) {
+              // 有配對的用戶訊息，一起記錄
+              logConversationPair(conversationState.current.currentUserMessage, assistantMsg);
+              conversationState.current.currentUserMessage = null; // 清除已配對的用戶訊息
+            } else {
+              // 沒有配對的用戶訊息，單獨記錄助手回應
+              console.warn("⚠️ Assistant response without paired user message");
+              reallyPostLog({
+                role: "assistant",
+                content: finalText,
+                eventId: assistantMsg.eventId,
+                timestamp: assistantMsg.timestamp
+              }).catch((error) => {
+                console.error("💥 Error logging orphaned assistant response:", error);
+              });
+            }
+          } else {
+            console.error("❌ No assistant text found after all fallback attempts!");
+            postLog({
+              role: "system",
+              content: `[ERROR] Assistant response completed but no text extracted. Event: ${eventType}`,
+              eventId: `error_${Date.now()}`,
+            });
+          }
+
+          // 重置助手回應狀態
+          conversationState.current.currentAssistantResponse = {
+            isActive: false,
+            responseId: null,
+            textBuffer: "",
+            audioTranscriptBuffer: "",
+            startTime: 0,
+          };
+        }
+
+        // 8️⃣ 麥克風狀態
+        if (eventType === "input_audio_buffer.speech_started") {
+          setIsListening(true);
+          console.log("🎤 User started speaking");
+        }
+        if (["input_audio_buffer.speech_stopped", "input_audio_buffer.committed"].includes(eventType)) {
+          setIsListening(false);
+          console.log("🎤 User stopped speaking");
+        }
+
+        // 9️⃣ 錯誤處理
         if (eventType === "error") {
           console.error("❌ Realtime API error:", eventData);
           postLog({
@@ -15760,9 +15914,43 @@ function AppContent() {
             eventId: eventData?.event_id || `rt_error_${Date.now()}`,
           });
         }
+
+        // 🔍 調試：記錄未知事件
+        const KNOWN_EVENTS = [
+          "session.created",
+          "session.updated",
+          "input_audio_buffer.speech_started",
+          "input_audio_buffer.speech_stopped",
+          "input_audio_buffer.committed",
+          "conversation.item.input_audio_transcription.completed",
+          "conversation.item.input_audio_transcription.failed",
+          "conversation.item.created",
+          "response.created",
+          "response.content_part.added",
+          "response.text.delta",
+          "response.output_text.delta",
+          "output_text.delta",
+          "response.text.done",
+          "response.output_text.done",
+          "output_text.done",
+          "response.content_part.done",
+          "response.done",
+          "response.completed",
+          "response.audio_transcript.delta",
+          "response.audio_transcript.done",
+          "response.audio.done",
+          "response.output_item.done",
+          "rate_limits.updated",
+          "output_audio_buffer.stopped",
+          "input_audio_buffer.cleared",
+        ];
+
+        if (!KNOWN_EVENTS.includes(eventType)) {
+          console.log("🔍 Unknown event:", eventType, eventData);
+        }
       });
 
-      // SDP
+      // 創建 WebRTC offer
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
 
@@ -15773,53 +15961,18 @@ function AppContent() {
         body: offer.sdp,
         headers: { Authorization: `Bearer ${EPHEMERAL_KEY}`, "Content-Type": "application/sdp" },
       });
-
-      if (!sdpResponse.ok) {
-        console.error("❌ SDP exchange failed:", sdpResponse.status, sdpResponse.statusText);
-        setSessionStatus("DISCONNECTED");
-        // 自動切 fallback（合規）
-        setProviderMode("fallback");
-        await connectToFallbackLocal();
-        return;
-      }
-
       await pc.setRemoteDescription({ type: "answer" as RTCSdpType, sdp: await sdpResponse.text() });
-      console.log("🎯 WebRTC connection established (OpenAI)");
-    } catch (err) {
-      console.error("💥 Error connecting to realtime (OpenAI):", err);
-      setSessionStatus("DISCONNECTED");
-      // 自動切 fallback（合規）
-      setProviderMode("fallback");
-      await connectToFallbackLocal();
-    }
-  }
 
-  // ====== 模式 B：Fallback（本地事件 + 瀏覽器 TTS）======
-  async function connectToFallbackLocal() {
-    try {
-      // 用假的「本地資料通道」物件來維持既有 sendClientEvent() 介面
-      const fakeDC = createLocalLoopbackChannel({
-        onServerEvent: (evt) => handleServerEventRef.current(evt),
-        onListeningChange: (listening) => setIsListening(listening),
-        onSpeak: (text) => speakWithBrowserTTS(text, isAudioPlaybackEnabled),
-        extractTextFromOutput,
-        conversationState,
-        logSystem: (msg) =>
-          postLog({ role: "system", content: msg, eventId: `sys_${Date.now()}` }),
-      });
-
-      setDataChannel(fakeDC as unknown as RTCDataChannel);
-      setSessionStatus("CONNECTED");
-      console.log("✅ Fallback loopback connected (Browser TTS).");
+      console.log("🎯 WebRTC connection established");
     } catch (err) {
-      console.error("💥 Error connecting fallback:", err);
+      console.error("💥 Error connecting to realtime:", err);
       setSessionStatus("DISCONNECTED");
     }
   }
 
   function stopSession() {
     if (dataChannel) {
-      try { (dataChannel as any).close?.(); } catch {}
+      dataChannel.close();
       setDataChannel(null);
     }
     if (peerConnection.current) {
@@ -15883,14 +16036,13 @@ function AppContent() {
       console.warn("can't cancel, no recent assistant message found");
       return;
     }
-    if ((mostRecentAssistantMessage as any).status === "IN_PROGRESS") {
+    // @ts-ignore: status 可能是你自訂型別
+    if (mostRecentAssistantMessage.status === "IN_PROGRESS") {
       sendClientEvent({ type: "response.cancel" }, "(cancel due to user interruption)");
     }
     if (isOutputAudioBufferActive) {
       sendClientEvent({ type: "output_audio_buffer.clear" }, "(cancel due to user interruption)");
     }
-    // 停止瀏覽器 TTS（fallback）
-    try { window.speechSynthesis?.cancel(); } catch {}
   };
 
   const handleSendTextMessage = () => {
@@ -15908,7 +16060,7 @@ function AppContent() {
       "(send user text message)"
     );
 
-    // 🌟 文字訊息加入配對系統
+    // 🌟 文字訊息也加入配對系統
     const eventId = `text_${Date.now()}_${Math.random().toString(36).slice(2)}`;
     conversationState.current.currentUserMessage = {
       content: textToSend,
@@ -15921,7 +16073,7 @@ function AppContent() {
   };
 
   const handleTalkButtonDown = () => {
-    if (sessionStatus !== "CONNECTED" || (dataChannel as any)?.readyState !== "open") return;
+    if (sessionStatus !== "CONNECTED" || dataChannel?.readyState !== "open") return;
     console.log("🎤 PTT button pressed down");
     cancelAssistantSpeech();
     setIsPTTUserSpeaking(true);
@@ -15930,7 +16082,7 @@ function AppContent() {
   };
 
   const handleTalkButtonUp = () => {
-    if (sessionStatus !== "CONNECTED" || (dataChannel as any)?.readyState !== "open" || !isPTTUserSpeaking) return;
+    if (sessionStatus !== "CONNECTED" || dataChannel?.readyState !== "open" || !isPTTUserSpeaking) return;
     console.log("🎤 PTT button released");
     setIsPTTUserSpeaking(false);
     setIsListening(false);
@@ -15940,7 +16092,7 @@ function AppContent() {
 
   const handleMicrophoneClick = () => {
     if (isOutputAudioBufferActive) {
-      console.log("打斷 AI 講話");
+      console.log("打斷 ChatGPT 講話");
       cancelAssistantSpeech();
       return;
     }
@@ -15955,7 +16107,6 @@ function AppContent() {
   };
 
   useEffect(() => {
-    // 預設 VAD
     setIsPTTActive(false);
     localStorage.setItem("conversationMode", "VAD");
 
@@ -16008,7 +16159,7 @@ function AppContent() {
           <div>
             <Image src="/Weider_logo_1.png" alt="Weider Logo" width={40} height={40} className="mr-2" />
           </div>
-          <div>AI 營養師{providerMode === "fallback" ? "（Fallback 模式）" : ""}</div>
+          <div>AI 營養師</div>
         </div>
 
         <div className="flex items-center gap-3">
@@ -16021,7 +16172,7 @@ function AppContent() {
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />
-              <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-6.92 6-6.92h-2z" />
+              <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" />
             </svg>
             {!isPTTActive && isListening && !isOutputAudioBufferActive && (
               <div className="absolute -top-1 -right-1">
@@ -16039,12 +16190,12 @@ function AppContent() {
           setUserText={setUserText}
           onSendMessage={handleSendTextMessage}
           downloadRecording={downloadRecording}
-          canSend={sessionStatus === "CONNECTED" && (dataChannel as any)?.readyState === "open"}
+          canSend={sessionStatus === "CONNECTED" && dataChannel?.readyState === "open"}
           handleTalkButtonDown={handleTalkButtonDown}
           handleTalkButtonUp={handleTalkButtonUp}
           isPTTUserSpeaking={isPTTUserSpeaking}
           isPTTActive={isPTTActive}
-          // ⭐️ 評分相關 props
+          // ⭐️ 評分相關 props（你已在 Transcript.tsx 中接收/渲染）
           onRate={sendSatisfactionRating}
           ratingsByTargetId={ratingsByTargetId}
         />
@@ -16069,163 +16220,6 @@ function App() {
 }
 
 export default App;
-
-/* =========================
-   本地 Loopback 通道（Fallback）
-   ========================= */
-function createLocalLoopbackChannel(opts: {
-  onServerEvent: (evt: any) => void;
-  onListeningChange: (listening: boolean) => void;
-  onSpeak: (text: string) => void;
-  extractTextFromOutput: (o: any) => string;
-  conversationState: React.MutableRefObject<{
-    currentUserMessage: { content: string; eventId: string; timestamp: number } | null;
-    currentAssistantResponse: { isActive: boolean; responseId: string | null; textBuffer: string; audioTranscriptBuffer: string; startTime: number; };
-    conversationPairs: Array<any>;
-  }>;
-  logSystem: (msg: string) => void;
-}) {
-  const listeners: Record<string, Array<(e: any) => void>> = { open: [], close: [], error: [], message: [] };
-
-  const channel: any = {
-    readyState: "open",
-    addEventListener: (type: "open" | "close" | "error" | "message", cb: (e: any) => void) => {
-      listeners[type] = listeners[type] || [];
-      listeners[type].push(cb);
-      if (type === "open") {
-        // 立即通知 open
-        setTimeout(() => cb({}), 0);
-      }
-    },
-    removeEventListener: (type: string, cb: (e: any) => void) => {
-      listeners[type] = (listeners[type] || []).filter((fn) => fn !== cb);
-    },
-    close: () => {
-      channel.readyState = "closed";
-      (listeners.close || []).forEach((fn) => fn({}));
-    },
-    send: (payload: string) => {
-      try {
-        const eventObj = JSON.parse(payload);
-        handleClientEvent(eventObj);
-      } catch (e) {
-        (listeners.error || []).forEach((fn) => fn({ error: e }));
-      }
-    },
-  };
-
-  // 以最小事件集合模擬 Realtime 回傳
-  function emitServerEvent(evt: any) {
-    opts.onServerEvent(evt);
-    (listeners.message || []).forEach((fn) => fn({ data: JSON.stringify(evt) }));
-  }
-
-  let latestInstruction = "";
-  let lastUserText = "";
-
-  function handleClientEvent(evt: any) {
-    const t = evt?.type;
-
-    if (t === "session.update") {
-      latestInstruction = evt?.session?.instructions || "";
-      emitServerEvent({ type: "session.updated", session: evt.session });
-      return;
-    }
-
-    if (t === "input_audio_buffer.clear") {
-      opts.onListeningChange(false);
-      return;
-    }
-
-    if (t === "input_audio_buffer.commit") {
-      // 假裝語音已完成
-      opts.onListeningChange(false);
-      // 可於此做 STT（若日後接替代供應商）
-      return;
-    }
-
-    if (t === "response.cancel") {
-      window.speechSynthesis?.cancel();
-      emitServerEvent({ type: "output_audio_buffer.stopped" });
-      return;
-    }
-
-    if (t === "output_audio_buffer.clear") {
-      window.speechSynthesis?.cancel();
-      emitServerEvent({ type: "output_audio_buffer.stopped" });
-      return;
-    }
-
-    if (t === "conversation.item.create") {
-      const item = evt?.item;
-      if (item?.role === "user") {
-        const text = (item.content?.[0]?.text || "").trim();
-        lastUserText = text;
-        // 模擬「使用者語音轉錄完成」事件，維持 UI/日誌行為一致
-        emitServerEvent({
-          type: "conversation.item.input_audio_transcription.completed",
-          text,
-          transcript: text,
-          item_id: `speech_${Date.now()}`
-        });
-      }
-      return;
-    }
-
-    if (t === "response.create") {
-      // 模擬助理開始
-      const responseId = `resp_${Date.now()}`;
-      emitServerEvent({ type: "response.created", response: { id: responseId } });
-
-      // 產生一段簡單的回覆（可改為呼叫你自家後端）
-      const reply = generateFallbackReply(lastUserText, latestInstruction);
-
-      // 模擬文字增量
-      const chunks = chunkString(reply, 60);
-      chunks.forEach((c, idx) => {
-        setTimeout(() => {
-          emitServerEvent({ type: "response.output_text.delta", delta: c, response: { id: responseId } });
-        }, idx * 20);
-      });
-
-      // 完成文字
-      setTimeout(() => {
-        emitServerEvent({ type: "response.output_text.done", text: reply, response: { id: responseId } });
-        // 模擬 content_part.done（保險）
-        emitServerEvent({ type: "response.content_part.done", part: { type: "text", text: reply }, response: { id: responseId } });
-
-        // 讓瀏覽器朗讀
-        opts.onSpeak(reply);
-
-        // 回覆完成
-        emitServerEvent({ type: "response.done", response: { id: responseId, output: [{ type: "output_text", text: reply }] } });
-      }, chunks.length * 25);
-
-      return;
-    }
-  }
-
-  // 初始建立（模擬 session.created）
-  setTimeout(() => {
-    emitServerEvent({ type: "session.created", id: `local_${Date.now()}` });
-  }, 0);
-
-  return channel;
-}
-
-function chunkString(str: string, size: number) {
-  const out: string[] = [];
-  for (let i = 0; i < str.length; i += size) out.push(str.slice(i, i + size));
-  return out;
-}
-
-function generateFallbackReply(user: string, system: string) {
-  const lead = system ? `（系統指令已套用）` : "";
-  if (!user) return `${lead}您好！目前使用本地 fallback 模式，您可以輸入文字與我互動。`;
-  // 這裡你可以改成呼叫你自己的合規後端：fetch('/api/your-provider', { ... })
-  return `${lead}我收到你的訊息：「${user}」。目前為合規的本地語音朗讀模式；若所在區域允許並完成後端設定，頁面會自動切回 Realtime 直連。`;
-}
-
 
 
 
