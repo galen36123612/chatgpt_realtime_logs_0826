@@ -16036,8 +16036,7 @@ function AppContent() {
       console.warn("can't cancel, no recent assistant message found");
       return;
     }
-    // @ts-expect-error: status 可能是你自訂型別
-    if (mostRecentAssistantMessage.status === "IN_PROGRESS") {
+    if ((mostRecentAssistantMessage as any).status === "IN_PROGRESS") {
       sendClientEvent({ type: "response.cancel" }, "(cancel due to user interruption)");
     }
     if (isOutputAudioBufferActive) {
