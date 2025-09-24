@@ -15955,7 +15955,8 @@ function AppContent() {
       await pc.setLocalDescription(offer);
 
       const baseUrl = "https://api.openai.com/v1/realtime";
-      const model = "gpt-4o-realtime-preview-2024-12-17";
+      // 0924 ---> modify the model from 4o to gpt-5 ----> const model = "gpt-4o-realtime-preview-2024-12-17";
+      const model = "gpt-realtime";
       const sdpResponse = await fetch(`${baseUrl}?model=${model}`, {
         method: "POST",
         body: offer.sdp,
