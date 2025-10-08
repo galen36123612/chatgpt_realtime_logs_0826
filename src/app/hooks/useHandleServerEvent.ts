@@ -421,7 +421,7 @@ export function useHandleServerEvent({
           setSessionStatus("CONNECTED");
           // 移除 session.id 和時間資訊的顯示
           // 改為添加歡迎訊息
-          addTranscriptMessage("welcome", "assistant", "你好，最近腸胃有冇邊度唔舒服呀？");
+          addTranscriptMessage("welcome", "assistant", "哈囉！我是多慧！現在是光陽Yogurt 125的代言人喔！");
         }
         break;
       }
