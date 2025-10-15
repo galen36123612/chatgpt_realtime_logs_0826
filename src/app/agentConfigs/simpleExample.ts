@@ -1,4 +1,4 @@
-/*import { AgentConfig } from "@/app/types";
+import { AgentConfig } from "@/app/types";
 import { injectTransferTools } from "./utils";
 
 // Define agents
@@ -223,8 +223,52 @@ const greeter: AgentConfig = {
 "7. 可以適時提及在台灣的生活經驗（騎車、環島計畫等）來增加真實感\n" +
 "8. 回答技術問題時保持專業，但用淺顯易懂的方式說明\n" +
 "9. 如被問到個人生活或非產品相關問題，可簡短回應但要導回 Yogurt 125 主題\n" +
-"10. 價格資訊請提醒使用者「以官網與經銷商最新公告為準」"
-    ,
+"10. 價格資訊請提醒使用者「以官網與經銷商最新公告為準」\n" +
+"XA6Q2PU1RTIT, 鄭芬婷, 0907805693, 新竹市香山區建國路260號, 已到達取貨門市\n" +
+"M198KJK3LQCY, 賴俊柏, 0981433236, 臺南市北區建國弄109號3樓之3, 出貨\n" +
+"U6R5MRZT6FID, 林婷珊, 0942133294, 臺中市西屯區民族街276號, 已到達取貨門市\n" +
+"S681AW9O1FJ1, 劉雯俊, 0962013876, 新竹市東區忠孝弄265號3樓之3, 出貨\n" +
+"2I90RKBX6P1Z, 王傑冠柏, 0927555595, 桃園市蘆竹區建國大道272號, 已到達取貨門市\n" +
+"TU5WPWKKMFYM, 劉宇庭, 0952399745, 臺中市南區中華弄74號, 已到達取貨門市\n" +
+"PET9X4MGP0SK, 曾志雯品, 0903791126, 臺中市南區文化巷278號17樓之1, 已到達取貨門市\n" +
+"FHLRZ2VE2P80, 郭淑佩郁, 0996673471, 新北市鶯歌區博愛巷85號11樓, 出貨\n" +
+"376TEO9KQ5SU, 林俊蓁, 0942011540, 臺南市安南區民族弄19號, 出貨\n" +
+"2Z8681RUVGSY, 郭婷國, 0997819104, 嘉義市西區中正街35號 待, 出貨\n" +
+"M9ORQ9HLD6PY, 洪宥佩, 0988695228, 桃園市平鎮區中正街213號14樓, 已到達取貨門市\n" +
+"1UQ2UOWBSY3F, 許宇蓁婷, 0940499116, 基隆市暖暖區民生弄285號18樓, 已到達取貨門市\n" +
+"I58CW87DX8JA, 曾君國, 0926560277, 基隆市七堵區民族大道118號, 已到達取貨門市\n" +
+"KAHANP20AX1W, 許傑妤婷, 0940887548, 桃園市蘆竹區中正大道67號9樓之2 待, 出貨\n" +
+"M157DU5KWFHV, 郭國品, 0905278974, 臺北市大安區民生巷188號14樓, 出貨\n" +
+"VX1IWXZK3QLC, 王偉如, 0937173351, 桃園市平鎮區民族巷174號7樓之3, 已到達取貨門市\n" +
+"PXNDZ9OSNGBJ, 黃怡芬, 0901112747, 高雄市前鎮區和平弄130號12樓, 出貨\n" +
+"64YEWD8GOJYW, 邱君傑佩, 0973898209, 新竹市北區和平巷10號5樓之1, 已到達取貨門市\n" +
+"E04RKZJLI7LZ, 林庭家, 0903625642, 臺南市中西區仁愛巷220號9樓之1, 出貨\n" +
+"P4N2OCOLFZNI, 洪建庭, 0919868180, 嘉義市東區成功巷29號, 已到達取貨門市\n" +
+"BOJNAY4D8K7N, 楊國伶, 0932866620, 新北市蘆洲區和平弄260號18樓 待, 出貨\n" +
+"SUKWRTZDACKR, 吳冠佩婷, 0936940957, 臺中市中區文化路260號12樓, 已到達取貨門市\n" +
+"QE4NX1YYPNKS, 張冠柏, 0996539514, 高雄市左營區忠孝巷72號13樓 待, 出貨\n" +
+"U2KXZVH8TP93, 廖如雯, 0906438150, 新北市蘆洲區光復大道159號 待, 出貨\n" +
+"GYSRZICVWH6W, 張珊婷, 0955890083, 基隆市信義區自強弄191號16樓, 已到達取貨門市\n" +
+"X9BT6WML9F8R, 黃婷伶怡, 0985016628, 臺中市東區民族巷140號, 已到達取貨門市\n" +
+"WS6IYP9H50LF, 賴宇芷, 0988369703, 新竹市香山區民生弄239號 待, 出貨\n" +
+"FLBS09C6FHRR, 蔡郁家庭, 0934953649, 臺中市北屯區自強路141號 待, 出貨\n" +
+"NK3P09BQS26X, 張欣偉, 0954000889, 高雄市前鎮區忠孝巷96號8樓之1 待, 出貨\n" +
+"6LD057JOQUXC, 楊雅怡冠, 0941328089, 桃園市平鎮區和平巷96號18樓之1, 已到達取貨門市\n" +
+"JO2UUVJ30RNJ, 張明蓁, 0997637463, 臺南市安南區中正巷275號7樓 待出貨\n" +
+"K301SANEOG1S, 許欣宥, 0978536435, 臺北市萬華區中華路232號13樓之1 待出貨\n" +
+"9UCDXN46B2VW, 鄭冠婷, 0935168102, 嘉義市西區博愛巷59號10樓 待出貨\n" +
+"9Z665SYZERCM, 王庭雯宇, 0958245997, 基隆市仁愛區光復巷179號14樓 待出貨\n" +
+"M6XOWNZSKKG3, 郭冠欣, 0941855054, 基隆市暖暖區仁愛街266號9樓 待, 出貨" +
+"KC6MYJ2H7U97, 陳瑋佩妍, 0909374247, 臺中市中區中華巷125號, 出貨\n" +
+"B6X0IJ50FYVH, 李國冠廷, 0914451176, 臺南市安平區建國街161號3樓之3, 已到達取貨門市\n" +
+"FLS5VO37HWKI, 許淑傑, 0977966400, 臺中市北屯區民生弄227號19樓, 出貨\n" +
+"FRBGMLHFGMT1, 吳蓁柏, 0974893749, 臺南市中西區和平弄231號11樓, 已到達取貨門市\n" +
+"9PFLEF1N1ZUY, 曾宥國俊, 0925829892, 基隆市七堵區和平大道20號10樓之1, 出貨\n" +
+"KK34BE3O8SKB, 劉怡冠, 0967979317, 高雄市新興區中正弄58號, 出貨\n" +
+"AFW7G8R3P7DJ, 蔡翰怡怡, 0963314673, 新北市蘆洲區民族街160號8樓, 出貨\n" +
+"BUWHN54OLAYQ, 陳怡婷庭, 0924299513, 新竹市北區自強弄182號2樓之2, 已到達取貨門市\n" +
+"12XQVB5H4HZY, 楊建佩雅, 0965770630, 高雄市新興區博愛街91號7樓之3, 出貨\n" +
+"7JW3N32M3BYW, 謝妤雅, 0966338414, 桃園市中壢區光復弄78號, 出貨\n",
   tools: [],
   downstreamAgents: [haikuWriter],
 };
@@ -232,12 +276,12 @@ const greeter: AgentConfig = {
 // add the transfer tool to point to downstreamAgents
 const agents = injectTransferTools([greeter, haikuWriter]);
 
-export default agents;*/
+export default agents;
 
 // 1015 adding vector store
 
 // app/agentConfigs/simpleExample.ts
-import { AgentConfig } from "@/app/types";
+/*import { AgentConfig } from "@/app/types";
 import { injectTransferTools } from "./utils";
 
 // ====== 可切換的 Debug 開關 ======
@@ -647,7 +691,7 @@ const greeter: AgentConfig = {
 
 // add the transfer tool to point to downstreamAgents
 const agents = injectTransferTools([greeter, haikuWriter]);
-export default agents;
+export default agents;*/
 
 
 
