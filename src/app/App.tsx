@@ -16239,31 +16239,10 @@ import { useHandleServerEvent } from "./hooks/useHandleServerEvent";
 import { allAgentSets, defaultAgentSetKey } from "@/app/agentConfigs";
 import useAudioDownload from "./hooks/useAudioDownload";
 
-// ✅ 新增：統一日誌角色型別（含 feedback）
+// ✅ 統一日誌角色型別（含 feedback）
 type LogRole = "user" | "assistant" | "system" | "feedback";
 
-/** ✅ 新增：你的 Vector Store ID 與工具組裝器 */
-const VECTOR_STORE_ID = "vs_68ec559f4914819181c6bb3a1775665a";
-
-/** 把 agent 自帶工具（可能是物件或陣列或空）與 file_search 合併，確保 tools 是陣列 */
-function buildToolsWithFileSearch(agentTools?: any) {
-  const safeAgentTools = Array.isArray(agentTools)
-    ? agentTools
-    : agentTools
-    ? [agentTools]
-    : [];
-
-  const fileSearchTool = {
-    type: "file_search",
-    vector_store_ids: [VECTOR_STORE_ID],
-    // 可選：降低片段數以換取延遲/成本（視需要開啟）
-    // max_num_results: 8,
-  };
-
-  return [fileSearchTool, ...safeAgentTools];
-}
-
-/** ✅ 新增：從 Realtime 的 response.output 中提取 citations（檔案引用） */
+/** ✅ 從 Realtime 的 response.output 中提取 citations（檔案引用） */
 function extractFileCitationsFromOutput(
   output: any
 ): Array<{ file_id?: string; vector_store_id?: string; quote?: string }> {
@@ -16271,14 +16250,11 @@ function extractFileCitationsFromOutput(
   const list = Array.isArray(output) ? output : [];
 
   for (const item of list) {
-    // 常見 item.type: "message" | "file_search_call" | ...
     if (item?.type === "message" && Array.isArray(item.content)) {
       for (const part of item.content) {
-        // 文字型內容常見 key: type: "output_text" 或 "text"
         const annotations = part?.annotations || [];
         if (Array.isArray(annotations)) {
           for (const ann of annotations) {
-            // 可能的 citation 結構（不同版本 schema 名稱可能小差異，這裡盡量寬鬆抓）
             if (
               (ann?.type && String(ann.type).toLowerCase().includes("file")) ||
               ann?.file_id ||
@@ -16294,11 +16270,8 @@ function extractFileCitationsFromOutput(
         }
       }
     }
-    // 可選：也把 file_search_call 類型記下來（知道檢索曾被觸發）
     if (item?.type === "file_search_call") {
-      citations.push({
-        vector_store_id: item?.vector_store_id,
-      });
+      citations.push({ vector_store_id: item?.vector_store_id });
     }
   }
 
@@ -16329,13 +16302,13 @@ function AppContent() {
   // ⭐️ 本地記錄：每個 assistant 訊息的評分（eventId -> 0/20/50/70/100）
   const [ratingsByTargetId, setRatingsByTargetId] = useState<Record<string, number>>({});
 
-  // ⭐️ 送出評分：UI 顯示表情；後端收到數字
+  // ⭐️ 送出評分
   function sendSatisfactionRating(targetEventId: string, rating: number) {
     const payloadContent = `[RATING] target=${targetEventId} value=${rating}`;
     const feedbackId = `feedback_${Date.now()}_${Math.random().toString(36).slice(2)}`;
     reallyPostLog({
       role: "feedback",
-      content: payloadContent,     // 後端只看數字與 target，表情只在 UI 顯示
+      content: payloadContent,
       eventId: feedbackId,
       timestamp: Date.now(),
       rating,
@@ -16378,7 +16351,6 @@ function AppContent() {
 
   // 防重複記錄
   const loggedEventIds = useRef<Set<string>>(new Set());
-  // ✅ 放寬 pending 佇列的型別，支援 feedback 與評分欄位
   const pendingLogsRef = useRef<
     Array<{
       role: LogRole;
@@ -16386,8 +16358,8 @@ function AppContent() {
       eventId?: string;
       pairId?: string;
       timestamp?: number;
-      rating?: number;         // 可選：滿意度數字（0/20/50/70/100）
-      targetEventId?: string;  // 可選：被評分的 assistant 訊息 ID
+      rating?: number;
+      targetEventId?: string;
     }>
   >([]);
 
@@ -16398,7 +16370,6 @@ function AppContent() {
   ) {
     const pairId = `pair_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
-    // 先記錄用戶訊息
     reallyPostLog({
       role: "user",
       content: userMsg.content,
@@ -16406,7 +16377,6 @@ function AppContent() {
       pairId,
       timestamp: userMsg.timestamp
     }).then(() => {
-      // 再記錄助手回應
       return reallyPostLog({
         role: "assistant",
         content: assistantMsg.content,
@@ -16421,15 +16391,15 @@ function AppContent() {
     });
   }
 
-  // 🔧 更新的 reallyPostLog 函數（接受 LogRole 與評分欄位）
+  // 🔧 更新的 reallyPostLog 函數
   async function reallyPostLog(log: {
     role: LogRole;
     content: string;
     eventId?: string;
     pairId?: string;
     timestamp?: number;
-    rating?: number;          // 可選
-    targetEventId?: string;   // 可選
+    rating?: number;
+    targetEventId?: string;
   }) {
     const eventId = log.eventId || `${log.role}_${Date.now()}_${Math.random().toString(36).slice(2)}`;
     if (loggedEventIds.current.has(eventId)) {
@@ -16473,7 +16443,7 @@ function AppContent() {
     }
   }
 
-  // 保留原本的 postLog（用於系統訊息）—型別也放寬到 LogRole
+  // 保留原本的 postLog
   function postLog(log: {
     role: LogRole;
     content: string;
@@ -16517,7 +16487,7 @@ function AppContent() {
     return () => window.removeEventListener("online", onOnline);
   }, [userId, sessionId]);
 
-  // 輔助函數：從 output 數組提取文字
+  // 輔助：從 output 取文字
   function extractTextFromOutput(output: any): string {
     let text = "";
     if (Array.isArray(output)) {
@@ -16656,7 +16626,7 @@ function AppContent() {
         logClientEvent({ error: err }, "data_channel.error");
       });
 
-      // ★★★ 重構的事件處理邏輯（含 citations 抽取） ★★★
+      // ★★★ 事件處理（含 citations 抽取） ★★★
       dc.addEventListener("message", (e: MessageEvent) => {
         const eventData: any = JSON.parse(e.data);
         handleServerEventRef.current(eventData);
@@ -16670,9 +16640,6 @@ function AppContent() {
           const normalized = raw && raw.trim() && raw.trim() !== "\n" ? raw.trim() : "[inaudible]";
           const eventId = eventData.item_id || `speech_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
-          console.log("🗣️ User speech completed:", normalized);
-
-          // 暫存用戶訊息，等待助手回應完成後一起記錄
           conversationState.current.currentUserMessage = {
             content: normalized,
             eventId,
@@ -16689,7 +16656,6 @@ function AppContent() {
               .filter(Boolean) as string[];
             const joined = transcripts.join("").trim();
             if (joined && !conversationState.current.currentUserMessage) {
-              console.log("🗣️ User speech (created->transcript):", joined);
               conversationState.current.currentUserMessage = {
                 content: joined,
                 eventId: item.id,
@@ -16699,7 +16665,7 @@ function AppContent() {
           }
         }
 
-        // 1.2 STT 失敗記錄（系統訊息，直接記錄）
+        // 1.2 STT 失敗記錄
         if (eventType === "conversation.item.input_audio_transcription.failed") {
           const reason = eventData?.error || "unknown";
           postLog({
@@ -16712,7 +16678,6 @@ function AppContent() {
         // 2️⃣ 助手回應開始
         if (eventType === "response.created") {
           const responseId = eventData.response?.id || eventData.id;
-          console.log("🤖 Assistant response started:", responseId);
           conversationState.current.currentAssistantResponse = {
             isActive: true,
             responseId,
@@ -16727,7 +16692,6 @@ function AppContent() {
           const delta = eventData.delta || "";
           if (delta && conversationState.current.currentAssistantResponse.isActive) {
             conversationState.current.currentAssistantResponse.audioTranscriptBuffer += delta;
-            console.log(`🎵 Added audio transcript delta (${delta.length} chars)`);
           }
         }
         if (eventType === "response.audio_transcript.done") {
@@ -16750,7 +16714,6 @@ function AppContent() {
           const delta = eventData.delta || eventData.text || "";
           if (delta && conversationState.current.currentAssistantResponse.isActive) {
             conversationState.current.currentAssistantResponse.textBuffer += delta;
-            console.log(`📝 Added text delta (${delta.length} chars)`);
           }
         }
 
@@ -16759,8 +16722,7 @@ function AppContent() {
         if (TEXT_DONE_EVENTS.some((ev) => eventType.includes(ev))) {
           const completedText = eventData.text || "";
           if (completedText && conversationState.current.currentAssistantResponse.isActive) {
-            if (conversationState.current.currentAssistantResponse.textBuffer.length < completedText.length)              {
-              console.log("🔄 Updating buffer with complete text");
+            if (conversationState.current.currentAssistantResponse.textBuffer.length < completedText.length) {
               conversationState.current.currentAssistantResponse.textBuffer = completedText;
             }
           }
@@ -16771,7 +16733,6 @@ function AppContent() {
           const part = eventData.part;
           if (part?.type === "text" && part.text && conversationState.current.currentAssistantResponse.isActive) {
             if (!conversationState.current.currentAssistantResponse.textBuffer) {
-              console.log("🆘 Using text from content_part.done as fallback");
               conversationState.current.currentAssistantResponse.textBuffer = part.text;
             }
           }
@@ -16780,32 +16741,21 @@ function AppContent() {
         // 7️⃣ 助手回應完成 - 配對記錄 + citation 抽取
         const RESPONSE_DONE_EVENTS = ["response.done", "response.completed"];
         if (RESPONSE_DONE_EVENTS.includes(eventType)) {
-          console.log("🏁 Assistant response completed");
-
           const assistantResponse = conversationState.current.currentAssistantResponse;
           let finalText = assistantResponse.textBuffer.trim();
 
-          // 文字提取 fallback 邏輯
           if (!finalText) {
-            console.warn("⚠️ Text buffer empty, trying fallback extraction");
             if (assistantResponse.audioTranscriptBuffer.trim()) {
               finalText = assistantResponse.audioTranscriptBuffer.trim();
-              console.log("🎵 Using audio transcript as primary text");
             }
             if (!finalText) {
               const response = eventData.response;
               if (response?.output) {
                 finalText = extractTextFromOutput(response.output);
-                if (finalText) {
-                  console.log("📦 Extracted from response.output");
-                }
               }
             }
             if (!finalText) {
               finalText = (eventData.text || eventData.content || "").trim();
-              if (finalText) {
-                console.log("🔍 Extracted from event data");
-              }
             }
           }
 
@@ -16829,14 +16779,10 @@ function AppContent() {
               timestamp: Date.now()
             };
 
-            // 🌟 關鍵改動：配對記錄
             if (conversationState.current.currentUserMessage) {
-              // 有配對的用戶訊息，一起記錄
               logConversationPair(conversationState.current.currentUserMessage, assistantMsg);
-              conversationState.current.currentUserMessage = null; // 清除已配對的用戶訊息
+              conversationState.current.currentUserMessage = null;
             } else {
-              // 沒有配對的用戶訊息，單獨記錄助手回應
-              console.warn("⚠️ Assistant response without paired user message");
               reallyPostLog({
                 role: "assistant",
                 content: finalText,
@@ -16847,7 +16793,6 @@ function AppContent() {
               });
             }
           } else {
-            console.error("❌ No assistant text found after all fallback attempts!");
             postLog({
               role: "system",
               content: `[ERROR] Assistant response completed but no text extracted. Event: ${eventType}`,
@@ -16855,7 +16800,6 @@ function AppContent() {
             });
           }
 
-          // 重置助手回應狀態
           conversationState.current.currentAssistantResponse = {
             isActive: false,
             responseId: null,
@@ -16868,11 +16812,9 @@ function AppContent() {
         // 8️⃣ 麥克風狀態
         if (eventType === "input_audio_buffer.speech_started") {
           setIsListening(true);
-          console.log("🎤 User started speaking");
         }
         if (["input_audio_buffer.speech_stopped", "input_audio_buffer.committed"].includes(eventType)) {
           setIsListening(false);
-          console.log("🎤 User stopped speaking");
         }
 
         // 9️⃣ 錯誤處理
@@ -16885,7 +16827,6 @@ function AppContent() {
           });
         }
 
-        // 🔍 調試：記錄未知事件
         const KNOWN_EVENTS = [
           "session.created",
           "session.updated",
@@ -16925,7 +16866,6 @@ function AppContent() {
       await pc.setLocalDescription(offer);
 
       const baseUrl = "https://api.openai.com/v1/realtime";
-      // 0924 ---> modify the model from gpt-5 to gpt-realtime-mini ----> const model = "gpt-4o-realtime-preview-2024-12-17";
       const model = "gpt-realtime-mini";
       const sdpResponse = await fetch(`${baseUrl}?model=${model}`, {
         method: "POST",
@@ -16954,7 +16894,6 @@ function AppContent() {
     setSessionStatus("DISCONNECTED");
     setIsListening(false);
 
-    // 重置對話狀態
     conversationState.current = {
       currentUserMessage: null,
       currentAssistantResponse: {
@@ -16970,7 +16909,7 @@ function AppContent() {
     pendingLogsRef.current.length = 0;
   }
 
-  /** ✅ 調整：在 session.update 中掛上 file_search 工具與你的 agent 工具合併 */
+  /** ✅ 只用 agentConfig 的 tools（不再動態插入 file_search） */
   const updateSession = () => {
     sendClientEvent({ type: "input_audio_buffer.clear" }, "clear audio buffer on session update");
     const currentAgent = selectedAgentConfigSet?.find((a) => a.name === " " + selectedAgentName || a.name === selectedAgentName);
@@ -16989,10 +16928,9 @@ function AppContent() {
       currentAgent?.instructions || ""
     }
 
-- 當問題需要公司/內部文件或知識庫內容時，請先使用 file_search 工具檢索向量庫，並在回答中附上來源。`;
+- 當問題需要公司/內部文件或知識庫內容時，請先使用 file_search 檢索向量庫，並在回答中附上來源。`;
 
-    // ✅ 把 file_search 工具與 agent 自帶工具合併（確保是陣列）
-    const tools = buildToolsWithFileSearch(currentAgent?.tools);
+    const tools = currentAgent?.tools ?? []; // 👈 僅使用 AgentConfig 內的 tools
 
     const sessionUpdateEvent = {
       type: "session.update",
@@ -17002,19 +16940,16 @@ function AppContent() {
         voice: "shimmer",
         input_audio_transcription: { model: "whisper-1" },
         turn_detection: turnDetection,
-        tools,               // 👈 已含 file_search + 你的其他工具
-        tool_choice: "auto", // 👈 讓模型自動決定是否呼叫工具
+        tools,
+        tool_choice: "auto",
       },
     };
-    sendClientEvent(sessionUpdateEvent, "enable file_search");
+    sendClientEvent(sessionUpdateEvent, "use agent.tools only");
   };
 
   const cancelAssistantSpeech = async () => {
     const mostRecentAssistantMessage = [...transcriptItems].reverse().find((item) => item.role === "assistant");
-    if (!mostRecentAssistantMessage) {
-      console.warn("can't cancel, no recent assistant message found");
-      return;
-    }
+    if (!mostRecentAssistantMessage) return;
     if ((mostRecentAssistantMessage as any).status === "IN_PROGRESS") {
       sendClientEvent({ type: "response.cancel" }, "(cancel due to user interruption)");
     }
@@ -17027,7 +16962,6 @@ function AppContent() {
     const textToSend = userText.trim();
     if (!textToSend) return;
 
-    console.log("💬 Sending text message:", textToSend);
     cancelAssistantSpeech();
 
     sendClientEvent(
@@ -17038,7 +16972,6 @@ function AppContent() {
       "(send user text message)"
     );
 
-    // 🌟 文字訊息也加入配對系統
     const eventId = `text_${Date.now()}_${Math.random().toString(36).slice(2)}`;
     conversationState.current.currentUserMessage = {
       content: textToSend,
@@ -17052,7 +16985,6 @@ function AppContent() {
 
   const handleTalkButtonDown = () => {
     if (sessionStatus !== "CONNECTED" || dataChannel?.readyState !== "open") return;
-    console.log("🎤 PTT button pressed down");
     cancelAssistantSpeech();
     setIsPTTUserSpeaking(true);
     setIsListening(true);
@@ -17061,7 +16993,6 @@ function AppContent() {
 
   const handleTalkButtonUp = () => {
     if (sessionStatus !== "CONNECTED" || dataChannel?.readyState !== "open" || !isPTTUserSpeaking) return;
-    console.log("🎤 PTT button released");
     setIsPTTUserSpeaking(false);
     setIsListening(false);
     sendClientEvent({ type: "input_audio_buffer.commit" }, "commit PTT");
@@ -17070,7 +17001,6 @@ function AppContent() {
 
   const handleMicrophoneClick = () => {
     if (isOutputAudioBufferActive) {
-      console.log("打斷 ChatGPT 講話");
       cancelAssistantSpeech();
       return;
     }
@@ -17081,7 +17011,6 @@ function AppContent() {
     const newMode = !isPTTActive;
     setIsPTTActive(newMode);
     localStorage.setItem("conversationMode", newMode ? "PTT" : "VAD");
-    console.log(`切換到${newMode ? "PTT" : "VAD"}模式`);
   };
 
   useEffect(() => {
@@ -17197,6 +17126,7 @@ function App() {
 }
 
 export default App;
+
 
 
 
