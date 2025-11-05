@@ -17066,7 +17066,7 @@ function AppContent() {
           <div>
             <Image src="/Weider_logo_1.png" alt="Weider Logo" width={40} height={40} className="mr-2" />
           </div>
-          <div>李多慧個性Testing</div>
+          <div>AI解籤人</div>
         </div>
 
         <div className="flex items-center gap-3">
