@@ -421,7 +421,7 @@ export function useHandleServerEvent({
           setSessionStatus("CONNECTED");
           // 移除 session.id 和時間資訊的顯示
           // 改為添加歡迎訊息
-          addTranscriptMessage("welcome", "assistant", "哈囉！我是AI解籤人！");
+          addTranscriptMessage("welcome", "assistant", "哈囉！歡迎來到行天宮AI解籤服務！請問你抽到幾號籤？");
         }
         break;
       }
