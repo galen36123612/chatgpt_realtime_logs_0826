@@ -16937,7 +16937,7 @@ function AppContent() {
       session: {
         modalities: ["text", "audio"],
         instructions,
-        voice: "shimmer",
+        voice: "onyx",
         input_audio_transcription: { model: "whisper-1" },
         turn_detection: turnDetection,
         tools,
