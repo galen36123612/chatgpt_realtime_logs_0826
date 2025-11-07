@@ -16937,7 +16937,7 @@ function AppContent() {
       session: {
         modalities: ["text", "audio"],
         instructions,
-        voice: "shimmer",
+        voice: "onyx",
         input_audio_transcription: { model: "whisper-1" },
         turn_detection: turnDetection,
         tools,
@@ -17066,7 +17066,7 @@ function AppContent() {
           <div>
             <Image src="/Weider_logo_1.png" alt="Weider Logo" width={40} height={40} className="mr-2" />
           </div>
-          <div>AI解籤人</div>
+          <div>AI解籤服務</div>
         </div>
 
         <div className="flex items-center gap-3">
