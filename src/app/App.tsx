@@ -17064,7 +17064,7 @@ function AppContent() {
       <div className="p-3 sm:p-5 text-lg font-semibold flex justify-between items-center flex-shrink-0 border-b border-gray-200">
         <div className="flex items-center cursor-pointer" onClick={() => window.location.reload()}>
           <div>
-            <Image src="/Weider_logo_1.png" alt="Weider Logo" width={40} height={40} className="mr-2" />
+            <Image src="/aigoasia_logo.png" alt="Weider Logo" width={40} height={40} className="mr-2" />
           </div>
           <div>AI解籤服務</div>
         </div>
