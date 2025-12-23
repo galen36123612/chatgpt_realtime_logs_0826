@@ -1,30 +1,57 @@
 // 1223 add gpt-realtime + gpt + web_search
 import OpenAI from "openai";
 
-export const runtime = "nodejs"; // 確保用 Node runtime
+export const runtime = "nodejs";
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 
+type WebSearchReq = {
+  query: string;
+  recency_days?: number;
+  domains?: string[];
+};
+
 export async function POST(req: Request) {
   try {
-    const { query, recency_days, domains } = await req.json();
+    const body = (await req.json()) as WebSearchReq;
 
-    const input = `請做網路搜尋並回傳：1) 3-6 點重點 2) 來源清單（含標題與URL）。查詢：${query}`;
+    const query = String(body?.query || "").trim();
+    const recency_days = Number.isFinite(body?.recency_days) ? Number(body.recency_days) : 30;
+    const domains = Array.isArray(body?.domains) ? body.domains.filter(Boolean).map(String) : [];
+
+    if (!query) {
+      return Response.json({ error: "Missing required field: query" }, { status: 400 });
+    }
+
+    // ✅ 把 recency_days / domains 真正用到（避免 ESLint unused）
+    const domainHint =
+      domains.length > 0 ? `\n- 優先只使用這些網域：${domains.join(", ")}` : "";
+    const recencyHint =
+      recency_days > 0 ? `\n- 優先參考最近 ${recency_days} 天內的資訊（若可取得）` : "";
+
+    const input = `你是一個搜尋助理。請先做網路搜尋，再以繁體中文整理結果。
+
+需求：
+- 先列出 3-6 個重點（條列）
+- 再列出來源（每筆包含：title + url）
+- 若來源之間資訊互相矛盾，請指出並以較可靠來源為主
+
+查詢：${query}${recencyHint}${domainHint}`;
 
     const response = await client.responses.create({
-      model: "gpt-5", // 或你要的其他支援 web_search 的 model
+      // ✅ 你也可以改成你想用的可用模型
+      model: "gpt-5",
       tools: [{ type: "web_search" }],
       input,
-      // 你也可以在 prompt 裡要求只看特定 domain；或使用文件裡提到的 domain filtering 機制 :contentReference[oaicite:5]{index=5}
     });
 
-    // 取出 citations（url_citation annotations）:contentReference[oaicite:6]{index=6}
+    // ✅ 抽 citations（url_citation annotations）
     const citations: Array<{ title?: string; url?: string }> = [];
     for (const item of response.output ?? []) {
       if (item.type === "message") {
         for (const part of item.content ?? []) {
-          for (const ann of part.annotations ?? []) {
-            if (ann.type === "url_citation") {
+          for (const ann of (part as any).annotations ?? []) {
+            if (ann?.type === "url_citation") {
               citations.push({ title: ann.title, url: ann.url });
             }
           }
@@ -35,9 +62,14 @@ export async function POST(req: Request) {
     return Response.json({
       answer: response.output_text,
       citations: citations.slice(0, 10),
-      // sources: response.sources, // 若你的 SDK/版本有提供，可一併回傳完整 sources :contentReference[oaicite:7]{index=7}
+      meta: {
+        query,
+        recency_days,
+        domains,
+      },
     });
   } catch (e: any) {
     return new Response(JSON.stringify({ error: String(e?.message || e) }), { status: 500 });
   }
 }
+
