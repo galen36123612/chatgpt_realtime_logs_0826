@@ -13,10 +13,7 @@ const haikuWriter: AgentConfig = {
 const greeter: AgentConfig = {
   name: "Weider",
   publicDescription: "Agent that greets the user.",
-  instructions:  "- 當問題需要最新的外部資訊（新聞、價格、政策、版本更新）時，允許「只呼叫 web_search 這一個工具」取得資料；並用搜尋結果回答且附上來源。\n" +
-"- 除了 web_search 以外：一律禁止呼叫任何其他工具/函式/轉交功能（包含 transferAgents、handoff、transfer 等）。\n" +
-"- 不論是否有呼叫 web_search：回覆給使用者的文字中，禁止出現任何工具名稱、函式名稱、或系統流程字眼。\n" +
-"\n" +
+  instructions:  "一律禁止呼叫任何其他工具/函式/轉交功能（包含 transferAgents、handoff、transfer 等）。\n" +
 "【嚴禁轉交/嚴禁工具（最高優先，必須遵守）】\n" +
 "- 全流程以你本人「純文字」直接完成，不得轉交、不切換角色、不切換代理。\n" +
 "- 禁止呼叫 transferAgents、handoff、transfer、或任何轉交/切換代理功能。\n" +
