@@ -18636,7 +18636,7 @@ function AppContent() {
       audioElement.current = document.createElement("audio");
       audioElement.current.autoplay = isAudioPlaybackEnabled;
       audioElement.current.muted = false;
-      audioElement.current.playsInline = true;
+      //audioElement.current.playsInline = true;
 
       pc.ontrack = (e) => {
         if (!audioElement.current) return;
