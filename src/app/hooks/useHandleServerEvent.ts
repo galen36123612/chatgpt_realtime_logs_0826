@@ -951,6 +951,7 @@ export function useHandleServerEvent({
   const { logServerEvent } = useEvent();
 
   const assistantDeltasRef = useRef<{ [itemId: string]: string }>({});
+  const handledFunctionCallIdsRef = useRef<Set<string>>(new Set());
 
   function transcriptItemExists(itemId?: string) {
     if (!itemId) return false;
@@ -967,15 +968,14 @@ export function useHandleServerEvent({
     return list
       .map((part: any) => {
         if (!part) return "";
-
         if (typeof part === "string") return part;
 
         return (
           part.text ||
           part.transcript ||
           part.output_text ||
-          part.audio?.transcript ||
           part.input_text ||
+          part.audio?.transcript ||
           ""
         );
       })
@@ -1010,7 +1010,7 @@ export function useHandleServerEvent({
       return;
     }
 
-    if (typeof text === "string" && text.length > 0) {
+    if (text) {
       updateTranscriptMessage(itemId, text, false);
     }
   }
@@ -1106,23 +1106,15 @@ export function useHandleServerEvent({
           },
         });
 
-        sendClientEvent(
-          {
-            type: "response.create",
-            response: {
-              output_modalities: ["audio"],
-            },
-          },
-          "(trigger response after toolLogic)"
-        );
+        // 保留你原本的寫法，不加 output_modalities，避免影響原本語音互動/插話
+        sendClientEvent({ type: "response.create" });
         return;
       }
 
       if (functionCallParams.name === "web_search") {
         const query = String(args?.query || "").trim();
-        const recency_days = Number.isFinite(args?.recency_days)
-          ? Number(args.recency_days)
-          : 30;
+        const recency_days =
+          Number.isFinite(args?.recency_days) ? Number(args.recency_days) : 30;
         const domains = Array.isArray(args?.domains) ? args.domains : undefined;
 
         if (!query) {
@@ -1138,15 +1130,8 @@ export function useHandleServerEvent({
             },
           });
 
-          sendClientEvent(
-            {
-              type: "response.create",
-              response: {
-                output_modalities: ["audio"],
-              },
-            },
-            "(trigger response after web_search error)"
-          );
+          // 保留你原本的寫法
+          sendClientEvent({ type: "response.create" });
           return;
         }
 
@@ -1184,15 +1169,8 @@ export function useHandleServerEvent({
           },
         });
 
-        sendClientEvent(
-          {
-            type: "response.create",
-            response: {
-              output_modalities: ["audio"],
-            },
-          },
-          "(trigger response after web_search)"
-        );
+        // 保留你原本的寫法
+        sendClientEvent({ type: "response.create" });
         return;
       }
 
@@ -1243,15 +1221,8 @@ export function useHandleServerEvent({
         },
       });
 
-      sendClientEvent(
-        {
-          type: "response.create",
-          response: {
-            output_modalities: ["audio"],
-          },
-        },
-        "(trigger response after fallback tool)"
-      );
+      // 保留你原本的寫法
+      sendClientEvent({ type: "response.create" });
     } catch (err) {
       console.error("handleFunctionCall error:", err);
 
@@ -1271,15 +1242,8 @@ export function useHandleServerEvent({
         },
       });
 
-      sendClientEvent(
-        {
-          type: "response.create",
-          response: {
-            output_modalities: ["audio"],
-          },
-        },
-        "(trigger response after tool error)"
-      );
+      // 保留你原本的寫法
+      sendClientEvent({ type: "response.create" });
     }
   };
 
@@ -1291,6 +1255,14 @@ export function useHandleServerEvent({
       case "session.created": {
         if (event.session?.id) {
           setSessionStatus("CONNECTED");
+
+          // 保留你原本的 transcript welcome。
+          // 真正的語音 welcome 仍由 App.tsx 的 response.create 控制。
+          addTranscriptMessage(
+            "welcome",
+            "assistant",
+            "你好！這裡是行天宮解籤服務！你抽到的是幾號籤？"
+          );
         }
         break;
       }
@@ -1320,11 +1292,16 @@ export function useHandleServerEvent({
 
         if (!itemId || !role) break;
 
+        if (transcriptItemExists(itemId)) {
+          if (text) updateTranscriptMessage(itemId, text, false);
+          break;
+        }
+
         if (role === "user" && !text) {
           text = "[Transcribing...]";
         }
 
-        ensureTranscriptMessage(itemId, role, text);
+        addTranscriptMessage(itemId, role, text);
         break;
       }
 
@@ -1344,7 +1321,6 @@ export function useHandleServerEvent({
 
           updateTranscriptItem(itemId, { status: "DONE" });
         }
-
         break;
       }
 
@@ -1360,7 +1336,6 @@ export function useHandleServerEvent({
 
           updateTranscriptItem(itemId, { status: "DONE" });
         }
-
         break;
       }
 
@@ -1369,10 +1344,9 @@ export function useHandleServerEvent({
         const itemId = item?.id;
         const role = item?.role as TranscriptRole | undefined;
 
-        if (itemId && role === "assistant") {
-          ensureTranscriptMessage(itemId, "assistant", "");
+        if (itemId && role === "assistant" && !transcriptItemExists(itemId)) {
+          addTranscriptMessage(itemId, "assistant", "");
         }
-
         break;
       }
 
@@ -1380,12 +1354,13 @@ export function useHandleServerEvent({
         const itemId = event.item_id;
         const partText = extractTextFromContent(event.part);
 
-        if (itemId && partText) {
-          appendAssistantDelta(itemId, partText);
-        } else if (itemId) {
-          ensureTranscriptMessage(itemId, "assistant", "");
+        if (itemId && !transcriptItemExists(itemId)) {
+          addTranscriptMessage(itemId, "assistant", "");
         }
 
+        if (itemId && partText) {
+          appendAssistantDelta(itemId, partText);
+        }
         break;
       }
 
@@ -1425,9 +1400,8 @@ export function useHandleServerEvent({
           }
 
           updateTranscriptItem(itemId, { status: "DONE" });
-          void processGuardrail(itemId, transcript);
+          processGuardrail(itemId, transcript);
         }
-
         break;
       }
 
@@ -1444,7 +1418,6 @@ export function useHandleServerEvent({
 
           updateTranscriptItem(itemId, { status: "DONE" });
         }
-
         break;
       }
 
@@ -1455,17 +1428,18 @@ export function useHandleServerEvent({
         const text = extractTextFromContent(item?.content);
 
         if (itemId) {
-          if (role === "assistant") {
-            ensureTranscriptMessage(itemId, "assistant", text);
-
-            if (text) {
-              void processGuardrail(itemId, text);
+          if (role === "assistant" && text) {
+            if (!transcriptItemExists(itemId)) {
+              addTranscriptMessage(itemId, "assistant", text);
+            } else {
+              updateTranscriptMessage(itemId, text, false);
             }
+
+            processGuardrail(itemId, text);
           }
 
           updateTranscriptItem(itemId, { status: "DONE" });
         }
-
         break;
       }
 
@@ -1478,12 +1452,17 @@ export function useHandleServerEvent({
               outputItem.name &&
               outputItem.arguments
             ) {
-              void handleFunctionCall({
-                name: outputItem.name,
-                call_id: outputItem.call_id,
-                arguments: outputItem.arguments,
-              });
-              continue;
+              const callId = outputItem.call_id || `${outputItem.name}_${outputItem.arguments}`;
+
+              if (!handledFunctionCallIdsRef.current.has(callId)) {
+                handledFunctionCallIdsRef.current.add(callId);
+
+                void handleFunctionCall({
+                  name: outputItem.name,
+                  call_id: outputItem.call_id,
+                  arguments: outputItem.arguments,
+                });
+              }
             }
 
             if (outputItem.type === "message" && outputItem.role === "assistant") {
@@ -1491,14 +1470,18 @@ export function useHandleServerEvent({
               const text = extractAssistantTextFromOutputItem(outputItem);
 
               if (itemId && text) {
-                ensureTranscriptMessage(itemId, "assistant", text);
+                if (!transcriptItemExists(itemId)) {
+                  addTranscriptMessage(itemId, "assistant", text);
+                } else {
+                  updateTranscriptMessage(itemId, text, false);
+                }
+
                 updateTranscriptItem(itemId, { status: "DONE" });
-                void processGuardrail(itemId, text);
+                processGuardrail(itemId, text);
               }
             }
           }
         }
-
         break;
       }
 
