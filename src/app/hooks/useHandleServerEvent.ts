@@ -997,24 +997,6 @@ export function useHandleServerEvent({
     return "";
   }
 
-  function ensureTranscriptMessage(
-    itemId: string | undefined,
-    role: TranscriptRole,
-    text = "",
-    hidden = false
-  ) {
-    if (!itemId) return;
-
-    if (!transcriptItemExists(itemId)) {
-      addTranscriptMessage(itemId, role, text, hidden);
-      return;
-    }
-
-    if (text) {
-      updateTranscriptMessage(itemId, text, false);
-    }
-  }
-
   function appendAssistantDelta(itemId: string | undefined, deltaText: string) {
     if (!itemId || !deltaText) return;
 
@@ -1106,7 +1088,7 @@ export function useHandleServerEvent({
           },
         });
 
-        // 保留你原本的寫法，不加 output_modalities，避免影響原本語音互動/插話
+        // 保留原本寫法，避免影響語音回覆與插話流程
         sendClientEvent({ type: "response.create" });
         return;
       }
@@ -1130,7 +1112,6 @@ export function useHandleServerEvent({
             },
           });
 
-          // 保留你原本的寫法
           sendClientEvent({ type: "response.create" });
           return;
         }
@@ -1169,7 +1150,6 @@ export function useHandleServerEvent({
           },
         });
 
-        // 保留你原本的寫法
         sendClientEvent({ type: "response.create" });
         return;
       }
@@ -1221,7 +1201,6 @@ export function useHandleServerEvent({
         },
       });
 
-      // 保留你原本的寫法
       sendClientEvent({ type: "response.create" });
     } catch (err) {
       console.error("handleFunctionCall error:", err);
@@ -1242,7 +1221,6 @@ export function useHandleServerEvent({
         },
       });
 
-      // 保留你原本的寫法
       sendClientEvent({ type: "response.create" });
     }
   };
@@ -1256,8 +1234,7 @@ export function useHandleServerEvent({
         if (event.session?.id) {
           setSessionStatus("CONNECTED");
 
-          // 保留你原本的 transcript welcome。
-          // 真正的語音 welcome 仍由 App.tsx 的 response.create 控制。
+          // 保留原本的文字 welcome；真正語音 welcome 仍由 App.tsx 控制
           addTranscriptMessage(
             "welcome",
             "assistant",
@@ -1495,4 +1472,3 @@ export function useHandleServerEvent({
 
   return handleServerEventRef;
 }
-
