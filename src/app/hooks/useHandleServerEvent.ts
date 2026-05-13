@@ -1238,7 +1238,7 @@ export function useHandleServerEvent({
           addTranscriptMessage(
             "welcome",
             "assistant",
-            "你好！這裡是行天宮解籤服務！你抽到的是幾號籤？"
+            ""
           );
         }
         break;
