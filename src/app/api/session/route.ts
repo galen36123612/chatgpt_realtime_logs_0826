@@ -155,7 +155,6 @@ export const runtime = "nodejs";
 export async function GET() {
   try {
     if (!process.env.OPENAI_API_KEY) {
-      console.error("Missing OPENAI_API_KEY");
       return NextResponse.json(
         {
           error: "Missing OPENAI_API_KEY",
@@ -165,7 +164,6 @@ export async function GET() {
       );
     }
 
-    // 1) 讀/建匿名 userId
     const cookieStore = await cookies();
     let userId = cookieStore.get("anonId")?.value;
     const needSetCookie = !userId;
@@ -174,30 +172,43 @@ export async function GET() {
       userId = randomUUID();
     }
 
-    // 2) 產生這次連線的 sessionId
     const sessionId = randomUUID();
 
-    // 3) 向 OpenAI 建立 Realtime ephemeral session
-    const resp = await fetch("https://api.openai.com/v1/realtime/sessions", {
+    const resp = await fetch("https://api.openai.com/v1/realtime/client_secrets", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "gpt-4o-realtime-preview-2024-12-17",
-        modalities: ["audio", "text"],
-        voice: "shimmer",
-        output_audio_format: "pcm16",
-        input_audio_format: "pcm16",
-        turn_detection: {
-          type: "server_vad",
-          threshold: 0.5,
-          prefix_padding_ms: 300,
-          silence_duration_ms: 800,
-          create_response: true,
-          interrupt_response: true,
+        expires_after: {
+          anchor: "created_at",
+          seconds: 600
         },
+        session: {
+          type: "realtime",
+          model: "gpt-realtime",
+          instructions:
+            "你是友善、自然、口語化的廟宇解籤助理。請使用繁體中文回覆。回答要簡潔、清楚、適合語音播放。",
+          audio: {
+            output: {
+              voice: "marin"
+            },
+            input: {
+              transcription: {
+                model: "whisper-1"
+              },
+              turn_detection: {
+                type: "server_vad",
+                threshold: 0.5,
+                prefix_padding_ms: 300,
+                silence_duration_ms: 800,
+                create_response: true,
+                interrupt_response: true
+              }
+            }
+          }
+        }
       }),
       cache: "no-store",
     });
@@ -214,9 +225,8 @@ export async function GET() {
       };
     }
 
-    // ✅ 這個非常重要：OpenAI 失敗時，不要包成 200 回前端
     if (!resp.ok) {
-      console.error("OpenAI Realtime session failed:", {
+      console.error("OpenAI Realtime client secret failed:", {
         status: resp.status,
         statusText: resp.statusText,
         data,
@@ -224,7 +234,7 @@ export async function GET() {
 
       return NextResponse.json(
         {
-          error: "openai_realtime_session_failed",
+          error: "openai_realtime_client_secret_failed",
           status: resp.status,
           statusText: resp.statusText,
           detail: data,
@@ -233,23 +243,29 @@ export async function GET() {
       );
     }
 
-    // ✅ 明確檢查 ephemeral key
-    if (!data?.client_secret?.value) {
-      console.error("OpenAI response missing client_secret.value:", data);
+    if (!data?.value) {
+      console.error("OpenAI response missing value:", data);
 
       return NextResponse.json(
         {
-          error: "missing_client_secret",
+          error: "missing_realtime_client_secret_value",
           detail: data,
         },
         { status: 502 }
       );
     }
 
-    // 4) 回傳 ephemeral key + 我們自己的 userId / sessionId
     const res = NextResponse.json(
       {
         ...data,
+
+        // ✅ 相容你舊的 app.tsx：它原本讀 data.client_secret.value
+        client_secret: {
+          value: data.value,
+          expires_at: data.expires_at,
+        },
+
+        model: data.session?.model || "gpt-realtime",
         userId,
         sessionId,
       },
@@ -260,7 +276,6 @@ export async function GET() {
       }
     );
 
-    // 5) 只有在沒有 anonId 時才設 cookie
     if (needSetCookie) {
       res.cookies.set({
         name: "anonId",
