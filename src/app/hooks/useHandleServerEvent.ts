@@ -1239,7 +1239,7 @@ export function useHandleServerEvent({
             //"welcome",
             //"assistant",
             //""
-          );
+          //);
         }
         break;
       }
