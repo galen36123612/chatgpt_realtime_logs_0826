@@ -1235,10 +1235,10 @@ export function useHandleServerEvent({
           setSessionStatus("CONNECTED");
 
           // 保留原本的文字 welcome；真正語音 welcome 仍由 App.tsx 控制
-          addTranscriptMessage(
-            "welcome",
-            "assistant",
-            ""
+          //addTranscriptMessage(
+            //"welcome",
+            //"assistant",
+            //""
           );
         }
         break;
