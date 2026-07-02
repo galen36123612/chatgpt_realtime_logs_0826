@@ -146,7 +146,7 @@ export async function GET() {
 
 //0513
 
-import { NextResponse } from "next/server";
+/*import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { randomUUID } from "crypto";
 
@@ -266,6 +266,184 @@ export async function GET() {
         },
 
         model: data.session?.model || "gpt-realtime",
+        userId,
+        sessionId,
+      },
+      {
+        headers: {
+          "cache-control": "no-store",
+        },
+      }
+    );
+
+    if (needSetCookie) {
+      res.cookies.set({
+        name: "anonId",
+        value: userId,
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        maxAge: 60 * 60 * 24 * 365,
+        secure: process.env.NODE_ENV === "production",
+      });
+    }
+
+    return res;
+  } catch (error: any) {
+    console.error("Error in /api/session:", error);
+
+    return NextResponse.json(
+      {
+        error: "Internal Server Error",
+        detail: String(error?.message || error),
+      },
+      { status: 500 }
+    );
+  }
+}*/
+
+//0702 realtime 2
+
+import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
+import { randomUUID } from "crypto";
+
+export const runtime = "nodejs";
+
+const REALTIME_MODEL = process.env.OPENAI_REALTIME_MODEL || "gpt-realtime-2";
+// 如果 gpt-realtime-2 你的帳號不能用，就在 .env 改成：
+// OPENAI_REALTIME_MODEL=gpt-realtime
+
+export async function GET() {
+  try {
+    if (!process.env.OPENAI_API_KEY) {
+      return NextResponse.json(
+        {
+          error: "Missing OPENAI_API_KEY",
+          detail: "Server environment variable OPENAI_API_KEY is not set.",
+        },
+        { status: 500 }
+      );
+    }
+
+    const cookieStore = await cookies();
+    let userId = cookieStore.get("anonId")?.value;
+    const needSetCookie = !userId;
+
+    if (!userId) {
+      userId = randomUUID();
+    }
+
+    const sessionId = randomUUID();
+
+    const resp = await fetch("https://api.openai.com/v1/realtime/client_secrets", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        expires_after: {
+          anchor: "created_at",
+          seconds: 600,
+        },
+        session: {
+          type: "realtime",
+          model: REALTIME_MODEL,
+          output_modalities: ["audio"],
+          instructions: `
+你是友善、自然、口語化的廟宇解籤助理。
+
+【預設語言】
+- 預設使用繁體中文回覆。
+- 回答要簡潔、清楚、適合語音播放。
+
+【多語音規則】
+- 如果使用者要求英文，請使用自然英文回答與發音。
+- 如果使用者要求日文，請使用自然日本語回答與發音。
+- 說日文時，必須使用日本語讀音，不要用中文、普通話或台灣中文去念日文漢字。
+- 日文句子中若有漢字，請依日本語音讀或訓讀自然發音。
+- 如果某些日文漢字容易被誤讀，請優先改用假名或更自然的日文表達。
+- 不要把日文內容翻成中文後再唸，也不要用中文聲調去唸日文。
+`.trim(),
+          audio: {
+            output: {
+              voice: "marin",
+            },
+            input: {
+              transcription: {
+                model: "gpt-4o-transcribe",
+                prompt:
+                  "The user may speak Mandarin Chinese, English, or Japanese. Preserve the spoken language. If Japanese is spoken, transcribe it as Japanese, not Mandarin.",
+              },
+              turn_detection: {
+                type: "server_vad",
+                threshold: 0.5,
+                prefix_padding_ms: 300,
+                silence_duration_ms: 800,
+                create_response: true,
+                interrupt_response: true,
+              },
+            },
+          },
+        },
+      }),
+      cache: "no-store",
+    });
+
+    const rawText = await resp.text();
+
+    let data: any = null;
+    try {
+      data = rawText ? JSON.parse(rawText) : null;
+    } catch {
+      data = {
+        error: "openai_non_json_response",
+        raw: rawText.slice(0, 1000),
+      };
+    }
+
+    if (!resp.ok) {
+      console.error("OpenAI Realtime client secret failed:", {
+        status: resp.status,
+        statusText: resp.statusText,
+        data,
+      });
+
+      return NextResponse.json(
+        {
+          error: "openai_realtime_client_secret_failed",
+          status: resp.status,
+          statusText: resp.statusText,
+          detail: data,
+        },
+        { status: resp.status }
+      );
+    }
+
+    if (!data?.value) {
+      console.error("OpenAI response missing value:", data);
+
+      return NextResponse.json(
+        {
+          error: "missing_realtime_client_secret_value",
+          detail: data,
+        },
+        { status: 502 }
+      );
+    }
+
+    const res = NextResponse.json(
+      {
+        ...data,
+
+        // 相容舊 app.tsx：它原本讀 data.client_secret.value
+        client_secret: {
+          value: data.value,
+          expires_at: data.expires_at,
+        },
+
+        model: data.session?.model || REALTIME_MODEL,
         userId,
         sessionId,
       },
