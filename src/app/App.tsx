@@ -20483,7 +20483,10 @@ function AppContent() {
         output_modalities: ["audio"],
         audio: {
           input: {
-            transcription: { model: "whisper-1" },
+            transcription: { 
+              model: "gpt-4o-transcribe"
+              prompt:"The user may speak Mandarin Chinese, English, or Japanese. Preserve the spoken language. If Japanese is spoken, transcribe it as Japanese, not Mandarin.",
+            },
             turn_detection: turnDetection,
           },
         },
