@@ -373,12 +373,10 @@ export async function GET() {
             input: {
               transcription: {
                 model: "gpt-4o-transcribe",
-                prompt:
-                  "The user may speak Mandarin Chinese, English, or Japanese. Preserve the spoken language. If Japanese is spoken, transcribe it as Japanese, not Mandarin.",
               },
               turn_detection: {
                 type: "server_vad",
-                threshold: 0.5,
+                threshold: 0.65,
                 prefix_padding_ms: 300,
                 silence_duration_ms: 800,
                 create_response: true,
