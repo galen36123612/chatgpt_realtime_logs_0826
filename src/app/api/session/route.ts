@@ -486,8 +486,10 @@ import { randomUUID } from "crypto";
 
 export const runtime = "nodejs";
 
-const REALTIME_MODEL = process.env.OPENAI_REALTIME_MODEL || "gpt-realtime-2";
-// 如果 gpt-realtime-2 你的帳號不能用，就在 .env 改成：
+const REALTIME_MODEL =
+  process.env.OPENAI_REALTIME_MODEL || "gpt-realtime-2";
+
+// 如果 gpt-realtime-2 你的帳號不能使用，可以在 .env 改成：
 // OPENAI_REALTIME_MODEL=gpt-realtime
 
 export async function GET() {
@@ -503,6 +505,7 @@ export async function GET() {
     }
 
     const cookieStore = await cookies();
+
     let userId = cookieStore.get("anonId")?.value;
     const needSetCookie = !userId;
 
@@ -512,22 +515,26 @@ export async function GET() {
 
     const sessionId = randomUUID();
 
-    const resp = await fetch("https://api.openai.com/v1/realtime/client_secrets", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        expires_after: {
-          anchor: "created_at",
-          seconds: 600,
+    const resp = await fetch(
+      "https://api.openai.com/v1/realtime/client_secrets",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+          "Content-Type": "application/json",
         },
-        session: {
-          type: "realtime",
-          model: REALTIME_MODEL,
-          output_modalities: ["audio"],
-          instructions: `
+        body: JSON.stringify({
+          expires_after: {
+            anchor: "created_at",
+            seconds: 600,
+          },
+
+          session: {
+            type: "realtime",
+            model: REALTIME_MODEL,
+            output_modalities: ["audio"],
+
+            instructions: `
 你是友善、自然、口語化的廟宇解籤助理。
 
 【預設語言】
@@ -542,50 +549,71 @@ export async function GET() {
 - 如果某些日文漢字容易被誤讀，請優先改用假名或更自然的日文表達。
 - 不要把日文內容翻成中文後再唸，也不要用中文聲調去唸日文。
 `.trim(),
-          audio: {
-            output: {
-              voice: "marin",
-            },
-            input: {
-              // 重點：補回降噪，降低環境聲被 VAD 當成使用者說話的機率
-              noise_reduction: {
-                type: "near_field",
+
+            audio: {
+              output: {
+                voice: "marin",
               },
 
-              transcription: {
-                model: "gpt-4o-transcribe",
-                prompt:
-                  "The user may speak Mandarin Chinese, English, or Japanese. Preserve the spoken language. If Japanese is spoken, transcribe it as Japanese, not Mandarin.",
-              },
+              input: {
+                /*
+                 * 筆電、手機、桌面麥克風採用遠場降噪。
+                 * 必須和 app.tsx 的 session.update 保持一致。
+                 */
+                noise_reduction: {
+                  type: "far_field",
+                },
 
-              // 重點：沿用比較穩的 VAD 節奏
-              turn_detection: {
-                type: "server_vad",
+                transcription: {
+                  model: "gpt-4o-transcribe",
 
-                // 0.65 是中間值；如果還是太敏感，可調到 0.7 或 0.75
-                threshold: 0.65,
+                  prompt:
+                    "The user may speak Mandarin Chinese, English, or Japanese. Preserve the spoken language. If Japanese is spoken, transcribe it as Japanese, not Mandarin.",
+                },
 
-                // 往前多保留一點音訊，避免第一個字被切掉
-                prefix_padding_ms: 500,
+                turn_detection: {
+                  type: "server_vad",
 
-                // 使用者停頓 1 秒才判定講完，比 800ms 更不容易搶話
-                silence_duration_ms: 1000,
+                  /*
+                   * 提高人聲觸發門檻。
+                   * 數值越高，越不容易把遠處談話或環境聲當成使用者說話。
+                   */
+                  threshold: 0.75,
 
-                create_response: true,
+                  /*
+                   * 保留偵測到人聲前 500ms 的內容，
+                   * 避免使用者第一個字被切掉。
+                   */
+                  prefix_padding_ms: 500,
 
-                // 保留語音插話能力
-                interrupt_response: true,
+                  /*
+                   * 使用者安靜一秒後才判定這一輪說話結束。
+                   */
+                  silence_duration_ms: 1000,
+
+                  /*
+                   * 偵測到使用者說完後，自動產生模型回覆。
+                   */
+                  create_response: true,
+
+                  /*
+                   * 保留使用者插話中斷 AI 語音的能力。
+                   */
+                  interrupt_response: true,
+                },
               },
             },
           },
-        },
-      }),
-      cache: "no-store",
-    });
+        }),
+
+        cache: "no-store",
+      }
+    );
 
     const rawText = await resp.text();
 
     let data: any = null;
+
     try {
       data = rawText ? JSON.parse(rawText) : null;
     } catch {
@@ -609,7 +637,9 @@ export async function GET() {
           statusText: resp.statusText,
           detail: data,
         },
-        { status: resp.status }
+        {
+          status: resp.status,
+        }
       );
     }
 
@@ -621,7 +651,9 @@ export async function GET() {
           error: "missing_realtime_client_secret_value",
           detail: data,
         },
-        { status: 502 }
+        {
+          status: 502,
+        }
       );
     }
 
@@ -629,7 +661,10 @@ export async function GET() {
       {
         ...data,
 
-        // 相容舊 app.tsx：它原本讀 data.client_secret.value
+        /*
+         * 相容舊版 app.tsx：
+         * 原本會讀取 data.client_secret.value。
+         */
         client_secret: {
           value: data.value,
           expires_at: data.expires_at,
@@ -667,7 +702,9 @@ export async function GET() {
         error: "Internal Server Error",
         detail: String(error?.message || error),
       },
-      { status: 500 }
+      {
+        status: 500,
+      }
     );
   }
 }
