@@ -20759,49 +20759,9 @@ import useAudioDownload from "./hooks/useAudioDownload";
 
 type LogRole = "user" | "assistant" | "system" | "feedback";
 
-/**
- * Realtime 輸入音訊設定
- *
- * 注意：
- * /api/session 雖然已經設定 VAD 與降噪，
- * 但 app.tsx 連線成功後還會送出 session.update。
- *
- * 因此這裡必須再次帶入相同設定，
- * 避免前端的 session.update 覆蓋後端的設定。
- */
-const INPUT_TRANSCRIPTION_PROMPT =
-  "The user may speak Mandarin Chinese, English, or Japanese. Preserve the spoken language. If Japanese is spoken, transcribe it as Japanese, not Mandarin.";
-
-const INPUT_NOISE_REDUCTION = {
-  type: "near_field" as const,
-};
-
-const SERVER_VAD_CONFIG = {
-  type: "server_vad" as const,
-
-  // 原本是 0.5，會過度敏感。
-  // 0.65 需要較明確的人聲才會觸發。
-  threshold: 0.65,
-
-  // 保留說話開始前 500ms，避免第一個字被切掉。
-  prefix_padding_ms: 500,
-
-  // 停頓 1 秒後才判定使用者說完。
-  silence_duration_ms: 1000,
-
-  create_response: true,
-
-  // 保留使用者插話中斷 AI 的能力。
-  interrupt_response: true,
-};
-
 function extractFileCitationsFromOutput(
   output: any
-): Array<{
-  file_id?: string;
-  vector_store_id?: string;
-  quote?: string;
-}> {
+): Array<{ file_id?: string; vector_store_id?: string; quote?: string }> {
   const citations: Array<{
     file_id?: string;
     vector_store_id?: string;
@@ -20850,17 +20810,14 @@ function AppContent() {
 
   function setSearchParam(key: string, value: string) {
     const params = new URLSearchParams(searchParams.toString());
-
     params.set(key, value);
-
     router.replace(`?${params.toString()}`);
   }
 
   const { transcriptItems } = useTranscript();
   const { logClientEvent, logServerEvent } = useEvent();
 
-  const [selectedAgentName, setSelectedAgentName] =
-    useState<string>("");
+  const [selectedAgentName, setSelectedAgentName] = useState<string>("");
 
   const [selectedAgentConfigSet, setSelectedAgentConfigSet] =
     useState<AgentConfig[] | null>(null);
@@ -20868,16 +20825,11 @@ function AppContent() {
   const [dataChannel, setDataChannel] =
     useState<RTCDataChannel | null>(null);
 
-  const dataChannelRef =
-    useRef<RTCDataChannel | null>(null);
-
+  const dataChannelRef = useRef<RTCDataChannel | null>(null);
   const hasSentWelcomeRef = useRef(false);
 
-  const peerConnection =
-    useRef<RTCPeerConnection | null>(null);
-
-  const audioElement =
-    useRef<HTMLAudioElement | null>(null);
+  const peerConnection = useRef<RTCPeerConnection | null>(null);
+  const audioElement = useRef<HTMLAudioElement | null>(null);
 
   const [sessionStatus, setSessionStatus] =
     useState<SessionStatus>("DISCONNECTED");
@@ -20888,11 +20840,8 @@ function AppContent() {
   const [isEventsPaneExpanded, setIsEventsPaneExpanded] =
     useState<boolean>(false);
 
-  const [userText, setUserText] =
-    useState<string>("");
-
-  const [isPTTActive, setIsPTTActive] =
-    useState<boolean>(false);
+  const [userText, setUserText] = useState<string>("");
+  const [isPTTActive, setIsPTTActive] = useState<boolean>(false);
 
   const [isPTTUserSpeaking, setIsPTTUserSpeaking] =
     useState<boolean>(false);
@@ -20900,13 +20849,10 @@ function AppContent() {
   const [isAudioPlaybackEnabled, setIsAudioPlaybackEnabled] =
     useState<boolean>(true);
 
-  const [isListening, setIsListening] =
-    useState<boolean>(false);
+  const [isListening, setIsListening] = useState<boolean>(false);
 
-  const [
-    isOutputAudioBufferActive,
-    setIsOutputAudioBufferActive,
-  ] = useState<boolean>(false);
+  const [isOutputAudioBufferActive, setIsOutputAudioBufferActive] =
+    useState<boolean>(false);
 
   const {
     startRecording,
@@ -20914,17 +20860,11 @@ function AppContent() {
     downloadRecording,
   } = useAudioDownload();
 
-  const [userId, setUserId] =
-    useState<string>("");
+  const [userId, setUserId] = useState<string>("");
+  const [sessionId, setSessionId] = useState<string>("");
 
-  const [sessionId, setSessionId] =
-    useState<string>("");
-
-  const userIdRef =
-    useRef<string>("");
-
-  const sessionIdRef =
-    useRef<string>("");
+  const userIdRef = useRef<string>("");
+  const sessionIdRef = useRef<string>("");
 
   const conversationState = useRef({
     currentUserMessage: null as {
@@ -20958,11 +20898,8 @@ function AppContent() {
     }>,
   });
 
-  const loggedEventIds =
-    useRef<Set<string>>(new Set());
-
-  const processedToolCallIds =
-    useRef<Set<string>>(new Set());
+  const loggedEventIds = useRef<Set<string>>(new Set());
+  const processedToolCallIds = useRef<Set<string>>(new Set());
 
   const pendingLogsRef = useRef<
     Array<{
@@ -20984,9 +20921,7 @@ function AppContent() {
       `[RATING] target=${targetEventId} value=${rating}`;
 
     const feedbackId =
-      `feedback_${Date.now()}_${Math.random()
-        .toString(36)
-        .slice(2)}`;
+      `feedback_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
     reallyPostLog({
       role: "feedback",
@@ -21003,10 +20938,7 @@ function AppContent() {
         }));
       })
       .catch((err) => {
-        console.error(
-          "💥 Error posting rating:",
-          err
-        );
+        console.error("💥 Error posting rating:", err);
       });
   }
 
@@ -21026,33 +20958,21 @@ function AppContent() {
         .slice(2)}`;
 
     if (loggedEventIds.current.has(eventId)) {
-      console.warn(
-        "🔄 Duplicate log prevented:",
-        eventId
-      );
-
+      console.warn("🔄 Duplicate log prevented:", eventId);
       return;
     }
 
     loggedEventIds.current.add(eventId);
 
-    const uid =
-      userIdRef.current ||
-      userId ||
-      "unknown";
-
-    const sid =
-      sessionIdRef.current ||
-      sessionId ||
-      "unknown";
+    const uid = userIdRef.current || userId || "unknown";
+    const sid = sessionIdRef.current || sessionId || "unknown";
 
     const payload = {
       ...log,
       userId: uid,
       sessionId: sid,
       eventId,
-      timestamp:
-        log.timestamp || Date.now(),
+      timestamp: log.timestamp || Date.now(),
     };
 
     try {
@@ -21078,18 +20998,13 @@ function AppContent() {
           pairId: log.pairId,
           preview:
             log.content.slice(0, 100) +
-            (log.content.length > 100
-              ? "..."
-              : ""),
+            (log.content.length > 100 ? "..." : ""),
           uid,
           sid,
         });
       }
     } catch (e) {
-      console.error(
-        "💥 postLog failed:",
-        e
-      );
+      console.error("💥 postLog failed:", e);
 
       pendingLogsRef.current.push({
         ...log,
@@ -21108,10 +21023,7 @@ function AppContent() {
     targetEventId?: string;
   }) {
     if (!log.content?.trim()) {
-      console.warn(
-        "🚫 postLog skipped: empty content"
-      );
-
+      console.warn("🚫 postLog skipped: empty content");
       return;
     }
 
@@ -21122,11 +21034,7 @@ function AppContent() {
           .slice(2)}`;
     }
 
-    if (
-      loggedEventIds.current.has(
-        log.eventId
-      )
-    ) {
+    if (loggedEventIds.current.has(log.eventId)) {
       console.warn(
         "🔄 Duplicate log prevented (pre-flight):",
         log.eventId
@@ -21136,10 +21044,7 @@ function AppContent() {
     }
 
     reallyPostLog(log).catch((error) => {
-      console.error(
-        "💥 Error in postLog:",
-        error
-      );
+      console.error("💥 Error in postLog:", error);
     });
   }
 
@@ -21156,9 +21061,7 @@ function AppContent() {
     }
   ) {
     const pairId =
-      `pair_${Date.now()}_${Math.random()
-        .toString(36)
-        .slice(2)}`;
+      `pair_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
     reallyPostLog({
       role: "user",
@@ -21173,8 +21076,7 @@ function AppContent() {
           content: assistantMsg.content,
           eventId: assistantMsg.eventId,
           pairId,
-          timestamp:
-            assistantMsg.timestamp,
+          timestamp: assistantMsg.timestamp,
         });
       })
       .then(() => {
@@ -21182,10 +21084,7 @@ function AppContent() {
           `📝 Logged conversation pair: Q(${userMsg.content.slice(
             0,
             30
-          )}...) -> A(${assistantMsg.content.slice(
-            0,
-            30
-          )}...)`
+          )}...) -> A(${assistantMsg.content.slice(0, 30)}...)`
         );
       })
       .catch((error) => {
@@ -21198,20 +21097,13 @@ function AppContent() {
 
   useEffect(() => {
     const flush = async () => {
-      if (
-        pendingLogsRef.current.length === 0
-      ) {
-        return;
-      }
+      if (pendingLogsRef.current.length === 0) return;
 
       console.log(
         `🚀 Flushing pending logs queue: ${pendingLogsRef.current.length} items`
       );
 
-      const queue = [
-        ...pendingLogsRef.current,
-      ];
-
+      const queue = [...pendingLogsRef.current];
       pendingLogsRef.current.length = 0;
 
       for (const log of queue) {
@@ -21223,48 +21115,33 @@ function AppContent() {
 
     const onOnline = () => flush();
 
-    window.addEventListener(
-      "online",
-      onOnline
-    );
+    window.addEventListener("online", onOnline);
 
     return () => {
-      window.removeEventListener(
-        "online",
-        onOnline
-      );
+      window.removeEventListener("online", onOnline);
     };
   }, [userId, sessionId]);
 
-  function extractTextFromOutput(
-    output: any
-  ): string {
+  function extractTextFromOutput(output: any): string {
     let text = "";
 
     if (Array.isArray(output)) {
       for (const item of output) {
-        if (
-          item?.type === "text" &&
-          item.text
-        ) {
+        if (item?.type === "text" && item.text) {
           text += item.text;
         } else if (item?.content) {
-          const content = Array.isArray(
-            item.content
-          )
+          const content = Array.isArray(item.content)
             ? item.content
             : [item.content];
 
           for (const contentItem of content) {
             if (
-              contentItem?.type ===
-                "text" &&
+              contentItem?.type === "text" &&
               contentItem.text
             ) {
               text += contentItem.text;
             } else if (
-              contentItem?.type ===
-                "audio" &&
+              contentItem?.type === "audio" &&
               contentItem.transcript
             ) {
               console.log(
@@ -21272,13 +21149,10 @@ function AppContent() {
                 contentItem.transcript
               );
 
-              text +=
-                contentItem.transcript;
+              text += contentItem.transcript;
             } else if (
-              (contentItem?.type ===
-                "output_text" ||
-                contentItem?.type ===
-                  "text") &&
+              (contentItem?.type === "output_text" ||
+                contentItem?.type === "text") &&
               contentItem?.text
             ) {
               text += contentItem.text;
@@ -21297,28 +21171,18 @@ function AppContent() {
   ) => {
     const dc = dataChannelRef.current;
 
-    if (
-      dc &&
-      dc.readyState === "open"
-    ) {
-      logClientEvent(
-        eventObj,
-        eventNameSuffix
-      );
+    if (dc && dc.readyState === "open") {
+      logClientEvent(eventObj, eventNameSuffix);
 
-      dc.send(
-        JSON.stringify(eventObj)
-      );
+      dc.send(JSON.stringify(eventObj));
 
       return true;
     }
 
     logClientEvent(
       {
-        attemptedEvent:
-          eventObj?.type,
-        readyState:
-          dc?.readyState || "null",
+        attemptedEvent: eventObj?.type,
+        readyState: dc?.readyState || "null",
       },
       "error.data_channel_not_open"
     );
@@ -21335,17 +21199,11 @@ function AppContent() {
   };
 
   function sendWelcomeOnce() {
-    if (hasSentWelcomeRef.current) {
-      return;
-    }
+    if (hasSentWelcomeRef.current) return;
 
-    const dc =
-      dataChannelRef.current;
+    const dc = dataChannelRef.current;
 
-    if (
-      !dc ||
-      dc.readyState !== "open"
-    ) {
+    if (!dc || dc.readyState !== "open") {
       console.warn(
         "🚫 Welcome skipped: data channel not open",
         dc?.readyState
@@ -21359,10 +21217,10 @@ function AppContent() {
     sendClientEvent(
       {
         type: "response.create",
+
         response: {
-          output_modalities: [
-            "audio",
-          ],
+          output_modalities: ["audio"],
+
           instructions:
             "請你現在主動用繁體中文說一句非常簡短的開場白：『您好，這裡是行天宮解籤服務，請問您抽到的是第幾籤？』說完就停下來等待使用者，不要繼續延伸。",
         },
@@ -21371,15 +21229,14 @@ function AppContent() {
     );
   }
 
-  const handleServerEventRef =
-    useHandleServerEvent({
-      setSessionStatus,
-      selectedAgentName,
-      selectedAgentConfigSet,
-      sendClientEvent,
-      setSelectedAgentName,
-      setIsOutputAudioBufferActive,
-    });
+  const handleServerEventRef = useHandleServerEvent({
+    setSessionStatus,
+    selectedAgentName,
+    selectedAgentConfigSet,
+    sendClientEvent,
+    setSelectedAgentName,
+    setIsOutputAudioBufferActive,
+  });
 
   useEffect(() => {
     let finalAgentConfig =
@@ -21389,8 +21246,7 @@ function AppContent() {
       !finalAgentConfig ||
       !allAgentSets[finalAgentConfig]
     ) {
-      finalAgentConfig =
-        defaultAgentSetKey;
+      finalAgentConfig = defaultAgentSetKey;
 
       setSearchParam(
         "agentConfig",
@@ -21406,20 +21262,14 @@ function AppContent() {
     const agentKeyToUse =
       agents[0]?.name || "";
 
-    setSelectedAgentName(
-      agentKeyToUse
-    );
-
-    setSelectedAgentConfigSet(
-      agents
-    );
+    setSelectedAgentName(agentKeyToUse);
+    setSelectedAgentConfigSet(agents);
   }, [searchParams]);
 
   useEffect(() => {
     if (
       selectedAgentName &&
-      sessionStatus ===
-        "DISCONNECTED"
+      sessionStatus === "DISCONNECTED"
     ) {
       startSession();
     }
@@ -21427,8 +21277,7 @@ function AppContent() {
 
   useEffect(() => {
     if (
-      sessionStatus ===
-        "CONNECTED" &&
+      sessionStatus === "CONNECTED" &&
       selectedAgentConfigSet &&
       selectedAgentName
     ) {
@@ -21441,21 +21290,13 @@ function AppContent() {
   ]);
 
   useEffect(() => {
-    if (
-      sessionStatus ===
-      "CONNECTED"
-    ) {
+    if (sessionStatus === "CONNECTED") {
       updateSession();
     }
   }, [isPTTActive]);
 
   async function startSession() {
-    if (
-      sessionStatus !==
-      "DISCONNECTED"
-    ) {
-      return;
-    }
+    if (sessionStatus !== "DISCONNECTED") return;
 
     await connectToRealtime();
   }
@@ -21497,49 +21338,35 @@ function AppContent() {
 
         logClientEvent(
           {
-            status:
-              tokenResponse.status,
-            statusText:
-              tokenResponse.statusText,
+            status: tokenResponse.status,
+            statusText: tokenResponse.statusText,
             body: data,
           },
           "error.session_route_failed"
         );
 
-        setSessionStatus(
-          "DISCONNECTED"
-        );
+        setSessionStatus("DISCONNECTED");
 
         return;
       }
 
       if (data?.userId) {
         setUserId(data.userId);
-
-        userIdRef.current =
-          data.userId;
+        userIdRef.current = data.userId;
 
         console.log(
           "👤 User ID set:",
-          data.userId.substring(
-            0,
-            8
-          ) + "..."
+          data.userId.substring(0, 8) + "..."
         );
       }
 
       if (data?.sessionId) {
         setSessionId(data.sessionId);
-
-        sessionIdRef.current =
-          data.sessionId;
+        sessionIdRef.current = data.sessionId;
 
         console.log(
           "🔗 Session ID set:",
-          data.sessionId.substring(
-            0,
-            8
-          ) + "..."
+          data.sessionId.substring(0, 8) + "..."
         );
       }
 
@@ -21558,33 +21385,25 @@ function AppContent() {
           data
         );
 
-        setSessionStatus(
-          "DISCONNECTED"
-        );
+        setSessionStatus("DISCONNECTED");
 
         return;
       }
 
-      const pc =
-        new RTCPeerConnection();
+      const pc = new RTCPeerConnection();
 
       peerConnection.current = pc;
 
       audioElement.current =
-        document.createElement(
-          "audio"
-        );
+        document.createElement("audio");
 
       audioElement.current.autoplay =
         isAudioPlaybackEnabled;
 
-      audioElement.current.muted =
-        false;
+      audioElement.current.muted = false;
 
       pc.ontrack = (e) => {
-        if (!audioElement.current) {
-          return;
-        }
+        if (!audioElement.current) return;
 
         audioElement.current.srcObject =
           e.streams[0];
@@ -21592,12 +21411,9 @@ function AppContent() {
         audioElement.current.autoplay =
           isAudioPlaybackEnabled;
 
-        audioElement.current.muted =
-          false;
+        audioElement.current.muted = false;
 
-        if (
-          isAudioPlaybackEnabled
-        ) {
+        if (isAudioPlaybackEnabled) {
           audioElement.current
             .play()
             .catch((err) => {
@@ -21614,12 +21430,16 @@ function AppContent() {
         {
           isSecureContext:
             window.isSecureContext,
+
           protocol:
             window.location.protocol,
+
           host:
             window.location.host,
+
           hasMediaDevices:
             !!navigator.mediaDevices,
+
           hasGetUserMedia:
             !!navigator.mediaDevices
               ?.getUserMedia,
@@ -21641,20 +21461,16 @@ function AppContent() {
         );
       }
 
-      /**
-       * 瀏覽器端麥克風處理
-       *
-       * autoGainControl 關閉是這次重要調整之一。
-       * 開啟自動增益時，瀏覽器可能會把遠處人聲、
-       * 冷氣聲、電視聲或環境聲一起放大。
-       */
       const newMs =
         await navigator.mediaDevices.getUserMedia(
           {
             audio: {
               echoCancellation: true,
               noiseSuppression: true,
-              autoGainControl: false,
+
+              // 恢復為 true，避免部分裝置關閉後反而變得敏感
+              autoGainControl: true,
+
               channelCount: 1,
             },
           }
@@ -21670,8 +21486,7 @@ function AppContent() {
                 label: t.label,
                 enabled: t.enabled,
                 muted: t.muted,
-                readyState:
-                  t.readyState,
+                readyState: t.readyState,
               })),
         }
       );
@@ -21685,26 +21500,7 @@ function AppContent() {
         );
       }
 
-      /**
-       * 確認瀏覽器最後實際採用的麥克風設定。
-       *
-       * 部分瀏覽器或裝置可能不完全接受
-       * autoGainControl: false。
-       */
-      console.log(
-        "🎚️ Effective microphone settings:",
-        {
-          settings:
-            audioTrack.getSettings(),
-          constraints:
-            audioTrack.getConstraints(),
-        }
-      );
-
-      pc.addTrack(
-        audioTrack,
-        newMs
-      );
+      pc.addTrack(audioTrack, newMs);
 
       const dc =
         pc.createDataChannel(
@@ -21712,7 +21508,6 @@ function AppContent() {
         );
 
       dataChannelRef.current = dc;
-
       setDataChannel(dc);
 
       dc.addEventListener(
@@ -21723,9 +21518,7 @@ function AppContent() {
             "data_channel.open"
           );
 
-          setSessionStatus(
-            "CONNECTED"
-          );
+          setSessionStatus("CONNECTED");
 
           console.log(
             "🚀 Data channel opened - ready for conversation"
@@ -21735,8 +21528,7 @@ function AppContent() {
             if (
               !hasSentWelcomeRef.current &&
               dataChannelRef.current
-                ?.readyState ===
-                "open"
+                ?.readyState === "open"
             ) {
               console.warn(
                 "⚠️ session.updated not observed yet; sending welcome fallback"
@@ -21757,18 +21549,13 @@ function AppContent() {
           );
 
           if (
-            dataChannelRef.current ===
-            dc
+            dataChannelRef.current === dc
           ) {
-            dataChannelRef.current =
-              null;
+            dataChannelRef.current = null;
           }
 
           setDataChannel(null);
-
-          setSessionStatus(
-            "DISCONNECTED"
-          );
+          setSessionStatus("DISCONNECTED");
         }
       );
 
@@ -21792,9 +21579,8 @@ function AppContent() {
           let eventData: any = null;
 
           try {
-            eventData = JSON.parse(
-              e.data
-            );
+            eventData =
+              JSON.parse(e.data);
           } catch (err) {
             console.error(
               "❌ Failed to parse realtime event:",
@@ -21809,23 +21595,16 @@ function AppContent() {
             eventData
           );
 
-          const eventType = String(
-            eventData?.type || ""
-          );
+          const eventType =
+            String(
+              eventData?.type || ""
+            );
 
           console.log(
             "📨 Event:",
             eventType
           );
 
-          /**
-           * 顯示真正生效的 Realtime Session 設定。
-           *
-           * 可以從 Console 確認：
-           * threshold 是否為 0.65
-           * noise_reduction 是否為 near_field
-           * silence_duration_ms 是否為 1000
-           */
           if (
             eventType ===
             "session.updated"
@@ -21833,11 +21612,6 @@ function AppContent() {
             console.log(
               "✅ Session updated",
               {
-                transcription:
-                  eventData?.session
-                    ?.audio?.input
-                    ?.transcription,
-
                 noiseReduction:
                   eventData?.session
                     ?.audio?.input
@@ -21847,6 +21621,11 @@ function AppContent() {
                   eventData?.session
                     ?.audio?.input
                     ?.turn_detection,
+
+                transcription:
+                  eventData?.session
+                    ?.audio?.input
+                    ?.transcription,
               }
             );
 
@@ -21877,11 +21656,9 @@ function AppContent() {
 
             conversationState.current.currentUserMessage =
               {
-                content:
-                  normalized,
+                content: normalized,
                 eventId,
-                timestamp:
-                  Date.now(),
+                timestamp: Date.now(),
               };
           }
 
@@ -21891,15 +21668,11 @@ function AppContent() {
             eventType ===
               "conversation.item.added"
           ) {
-            const item =
-              eventData.item;
+            const item = eventData.item;
 
             if (
-              item?.role ===
-                "user" &&
-              Array.isArray(
-                item.content
-              )
+              item?.role === "user" &&
+              Array.isArray(item.content)
             ) {
               const transcripts =
                 item.content
@@ -21924,12 +21697,9 @@ function AppContent() {
               ) {
                 conversationState.current.currentUserMessage =
                   {
-                    content:
-                      joined,
-                    eventId:
-                      item.id,
-                    timestamp:
-                      Date.now(),
+                    content: joined,
+                    eventId: item.id,
+                    timestamp: Date.now(),
                   };
               }
             }
@@ -21945,10 +21715,12 @@ function AppContent() {
 
             postLog({
               role: "system",
+
               content:
                 `[STT FAILED] ${String(
                   reason
                 ).slice(0, 200)}`,
+
               eventId:
                 eventData.item_id ||
                 `stt_fail_${Date.now()}`,
@@ -21960,8 +21732,7 @@ function AppContent() {
             "response.created"
           ) {
             const responseId =
-              eventData.response
-                ?.id ||
+              eventData.response?.id ||
               eventData.id;
 
             conversationState.current.currentAssistantResponse =
@@ -21969,10 +21740,8 @@ function AppContent() {
                 isActive: true,
                 responseId,
                 textBuffer: "",
-                audioTranscriptBuffer:
-                  "",
-                startTime:
-                  Date.now(),
+                audioTranscriptBuffer: "",
+                startTime: Date.now(),
               };
           }
 
@@ -22004,8 +21773,7 @@ function AppContent() {
               "response.output_audio_transcript.done"
           ) {
             const transcript =
-              eventData.transcript ||
-              "";
+              eventData.transcript || "";
 
             if (
               transcript &&
@@ -22028,21 +21796,18 @@ function AppContent() {
             }
           }
 
-          const TEXT_DELTA_EVENTS =
-            [
-              "response.text.delta",
-              "response.output_text.delta",
-              "response.output_text_annotation.added",
-              "output_text.delta",
-              "conversation.item.delta",
-            ];
+          const TEXT_DELTA_EVENTS = [
+            "response.text.delta",
+            "response.output_text.delta",
+            "response.output_text_annotation.added",
+            "output_text.delta",
+            "conversation.item.delta",
+          ];
 
           if (
             TEXT_DELTA_EVENTS.some(
               (ev) =>
-                eventType.includes(
-                  ev
-                )
+                eventType.includes(ev)
             )
           ) {
             const delta =
@@ -22062,19 +21827,16 @@ function AppContent() {
             }
           }
 
-          const TEXT_DONE_EVENTS =
-            [
-              "response.text.done",
-              "response.output_text.done",
-              "output_text.done",
-            ];
+          const TEXT_DONE_EVENTS = [
+            "response.text.done",
+            "response.output_text.done",
+            "output_text.done",
+          ];
 
           if (
             TEXT_DONE_EVENTS.some(
               (ev) =>
-                eventType.includes(
-                  ev
-                )
+                eventType.includes(ev)
             )
           ) {
             const completedText =
@@ -22105,12 +21867,10 @@ function AppContent() {
             eventType ===
             "response.content_part.done"
           ) {
-            const part =
-              eventData.part;
+            const part = eventData.part;
 
             if (
-              part?.type ===
-                "text" &&
+              part?.type === "text" &&
               part.text &&
               conversationState
                 .current
@@ -22129,11 +21889,10 @@ function AppContent() {
             }
           }
 
-          const RESPONSE_DONE_EVENTS =
-            [
-              "response.done",
-              "response.completed",
-            ];
+          const RESPONSE_DONE_EVENTS = [
+            "response.done",
+            "response.completed",
+          ];
 
           if (
             RESPONSE_DONE_EVENTS.includes(
@@ -22141,13 +21900,11 @@ function AppContent() {
             )
           ) {
             const outputItems =
-              eventData?.response
-                ?.output || [];
+              eventData?.response?.output ||
+              [];
 
             const functionCalls =
-              Array.isArray(
-                outputItems
-              )
+              Array.isArray(outputItems)
                 ? outputItems.filter(
                     (it: any) =>
                       it?.type ===
@@ -22157,9 +21914,7 @@ function AppContent() {
                   )
                 : [];
 
-            if (
-              functionCalls.length
-            ) {
+            if (functionCalls.length) {
               const callsToProcess =
                 functionCalls.filter(
                   (c: any) =>
@@ -22168,9 +21923,7 @@ function AppContent() {
                     )
                 );
 
-              if (
-                callsToProcess.length
-              ) {
+              if (callsToProcess.length) {
                 callsToProcess.forEach(
                   (c: any) =>
                     processedToolCallIds.current.add(
@@ -22191,8 +21944,7 @@ function AppContent() {
                         continue;
                       }
 
-                      let args: any =
-                        {};
+                      let args: any = {};
 
                       try {
                         args =
@@ -22210,8 +21962,7 @@ function AppContent() {
 
                       const query =
                         String(
-                          args.query ||
-                            ""
+                          args.query || ""
                         ).trim();
 
                       const recency_days =
@@ -22229,6 +21980,7 @@ function AppContent() {
 
                       postLog({
                         role: "system",
+
                         content:
                           `[WEB_SEARCH CALL] query="${query}" recency_days=${recency_days}${
                             domains?.length
@@ -22240,6 +21992,7 @@ function AppContent() {
                                 )}`
                               : ""
                           }`,
+
                         eventId:
                           `web_search_call_${call.call_id}`,
                       });
@@ -22248,25 +22001,25 @@ function AppContent() {
                         await fetch(
                           "/api/web_search",
                           {
-                            method:
-                              "POST",
-                            headers:
-                              {
-                                "Content-Type":
-                                  "application/json",
-                              },
-                            body: JSON.stringify(
-                              {
-                                query,
-                                recency_days,
-                                domains,
-                              }
-                            ),
+                            method: "POST",
+
+                            headers: {
+                              "Content-Type":
+                                "application/json",
+                            },
+
+                            body:
+                              JSON.stringify(
+                                {
+                                  query,
+                                  recency_days,
+                                  domains,
+                                }
+                              ),
                           }
                         );
 
-                      let data: any =
-                        null;
+                      let data: any = null;
 
                       try {
                         data =
@@ -22283,6 +22036,7 @@ function AppContent() {
                       if (!res.ok) {
                         postLog({
                           role: "system",
+
                           content:
                             `[WEB_SEARCH ERROR] status=${res.status} ${
                               res.statusText
@@ -22292,6 +22046,7 @@ function AppContent() {
                               0,
                               300
                             )}`,
+
                           eventId:
                             `web_search_err_${call.call_id}`,
                         });
@@ -22307,6 +22062,7 @@ function AppContent() {
 
                         postLog({
                           role: "system",
+
                           content:
                             `[WEB_SEARCH OK] citations=${cCount} preview=${String(
                               data?.answer ||
@@ -22315,6 +22071,7 @@ function AppContent() {
                               0,
                               200
                             )}`,
+
                           eventId:
                             `web_search_ok_${call.call_id}`,
                         });
@@ -22324,11 +22081,14 @@ function AppContent() {
                         {
                           type:
                             "conversation.item.create",
+
                           item: {
                             type:
                               "function_call_output",
+
                             call_id:
                               call.call_id,
+
                             output:
                               JSON.stringify(
                                 data
@@ -22346,13 +22106,11 @@ function AppContent() {
                       {
                         type:
                           "response.create",
-                        response:
-                          {
-                            output_modalities:
-                              [
-                                "audio",
-                              ],
-                          },
+
+                        response: {
+                          output_modalities:
+                            ["audio"],
+                        },
                       },
                       "(trigger response after web_search)"
                     );
@@ -22364,6 +22122,7 @@ function AppContent() {
 
                     postLog({
                       role: "system",
+
                       content:
                         `[WEB_SEARCH FAILED] ${String(
                           err
@@ -22371,6 +22130,7 @@ function AppContent() {
                           0,
                           200
                         )}`,
+
                       eventId:
                         `web_search_fail_${Date.now()}`,
                     });
@@ -22383,8 +22143,7 @@ function AppContent() {
                   isActive: false,
                   responseId: null,
                   textBuffer: "",
-                  audioTranscriptBuffer:
-                    "",
+                  audioTranscriptBuffer: "",
                   startTime: 0,
                 };
 
@@ -22411,9 +22170,7 @@ function AppContent() {
                 const response =
                   eventData.response;
 
-                if (
-                  response?.output
-                ) {
+                if (response?.output) {
                   finalText =
                     extractTextFromOutput(
                       response.output
@@ -22433,16 +22190,14 @@ function AppContent() {
             try {
               const citations =
                 extractFileCitationsFromOutput(
-                  eventData
-                    ?.response
+                  eventData?.response
                     ?.output
                 );
 
-              if (
-                citations?.length
-              ) {
+              if (citations?.length) {
                 postLog({
                   role: "system",
+
                   content:
                     `[CITATIONS] ${JSON.stringify(
                       citations
@@ -22460,21 +22215,18 @@ function AppContent() {
             }
 
             if (finalText) {
-              const assistantMsg =
-                {
-                  content:
-                    finalText,
+              const assistantMsg = {
+                content: finalText,
 
-                  eventId:
-                    assistantResponse.responseId ||
-                    eventData
-                      .response?.id ||
-                    eventData.id ||
-                    `assistant_${Date.now()}`,
+                eventId:
+                  assistantResponse.responseId ||
+                  eventData.response
+                    ?.id ||
+                  eventData.id ||
+                  `assistant_${Date.now()}`,
 
-                  timestamp:
-                    Date.now(),
-                };
+                timestamp: Date.now(),
+              };
 
               if (
                 conversationState
@@ -22493,26 +22245,25 @@ function AppContent() {
               } else {
                 reallyPostLog({
                   role: "assistant",
-                  content:
-                    finalText,
+                  content: finalText,
                   eventId:
                     assistantMsg.eventId,
                   timestamp:
                     assistantMsg.timestamp,
-                }).catch(
-                  (error) => {
-                    console.error(
-                      "💥 Error logging orphaned assistant response:",
-                      error
-                    );
-                  }
-                );
+                }).catch((error) => {
+                  console.error(
+                    "💥 Error logging orphaned assistant response:",
+                    error
+                  );
+                });
               }
             } else {
               postLog({
                 role: "system",
+
                 content:
                   `[ERROR] Assistant response completed but no text extracted. Event: ${eventType}`,
+
                 eventId:
                   `error_${Date.now()}`,
               });
@@ -22523,8 +22274,7 @@ function AppContent() {
                 isActive: false,
                 responseId: null,
                 textBuffer: "",
-                audioTranscriptBuffer:
-                  "",
+                audioTranscriptBuffer: "",
                 startTime: 0,
               };
           }
@@ -22545,9 +22295,7 @@ function AppContent() {
             setIsListening(false);
           }
 
-          if (
-            eventType === "error"
-          ) {
+          if (eventType === "error") {
             console.error(
               "❌ Realtime API error:",
               eventData
@@ -22555,6 +22303,7 @@ function AppContent() {
 
             postLog({
               role: "system",
+
               content:
                 `[REALTIME ERROR] ${JSON.stringify(
                   eventData
@@ -22562,6 +22311,7 @@ function AppContent() {
                   0,
                   500
                 )}`,
+
               eventId:
                 eventData?.event_id ||
                 `rt_error_${Date.now()}`,
@@ -22649,9 +22399,11 @@ function AppContent() {
           {
             method: "POST",
             body: offer.sdp,
+
             headers: {
               Authorization:
                 `Bearer ${EPHEMERAL_KEY}`,
+
               "Content-Type":
                 "application/sdp",
             },
@@ -22675,8 +22427,10 @@ function AppContent() {
           {
             status:
               sdpResponse.status,
+
             statusText:
               sdpResponse.statusText,
+
             body:
               errorText.slice(
                 0,
@@ -22686,9 +22440,7 @@ function AppContent() {
           "error.realtime_sdp_failed"
         );
 
-        setSessionStatus(
-          "DISCONNECTED"
-        );
+        setSessionStatus("DISCONNECTED");
 
         return;
       }
@@ -22696,6 +22448,7 @@ function AppContent() {
       await pc.setRemoteDescription({
         type:
           "answer" as RTCSdpType,
+
         sdp:
           await sdpResponse.text(),
       });
@@ -22714,16 +22467,12 @@ function AppContent() {
         "💥 Error connecting to realtime:",
         {
           name: err?.name,
-          message:
-            err?.message,
-          stack:
-            err?.stack,
+          message: err?.message,
+          stack: err?.stack,
         }
       );
 
-      setSessionStatus(
-        "DISCONNECTED"
-      );
+      setSessionStatus("DISCONNECTED");
     }
   }
 
@@ -22736,14 +22485,10 @@ function AppContent() {
       dc.close();
     }
 
-    dataChannelRef.current =
-      null;
-
+    dataChannelRef.current = null;
     setDataChannel(null);
 
-    if (
-      peerConnection.current
-    ) {
+    if (peerConnection.current) {
       peerConnection.current
         .getSenders()
         .forEach((sender) => {
@@ -22753,19 +22498,13 @@ function AppContent() {
         });
 
       peerConnection.current.close();
-
-      peerConnection.current =
-        null;
+      peerConnection.current = null;
     }
 
-    setSessionStatus(
-      "DISCONNECTED"
-    );
-
+    setSessionStatus("DISCONNECTED");
     setIsListening(false);
 
-    hasSentWelcomeRef.current =
-      false;
+    hasSentWelcomeRef.current = false;
 
     conversationState.current = {
       currentUserMessage: null,
@@ -22782,18 +22521,15 @@ function AppContent() {
     };
 
     loggedEventIds.current.clear();
-
     processedToolCallIds.current.clear();
 
-    pendingLogsRef.current.length =
-      0;
+    pendingLogsRef.current.length = 0;
   }
 
   const updateSession = () => {
     sendClientEvent(
       {
-        type:
-          "input_audio_buffer.clear",
+        type: "input_audio_buffer.clear",
       },
       "clear audio buffer on session update"
     );
@@ -22807,24 +22543,27 @@ function AppContent() {
             selectedAgentName
       );
 
-    /**
-     * PTT 模式：
-     * turn_detection 設成 null，
-     * 由使用者按住按鈕錄音並手動 commit。
-     *
-     * 持續對話模式：
-     * 使用較不敏感的 Server VAD。
-     */
     const turnDetection =
       isPTTActive
         ? null
         : {
-            ...SERVER_VAD_CONFIG,
+            type: "server_vad",
+
+            // 提高觸發門檻，降低環境聲誤觸發
+            threshold: 0.75,
+
+            // 保留說話開始前 500ms
+            prefix_padding_ms: 500,
+
+            // 停頓 1 秒後才判定講完
+            silence_duration_ms: 1000,
+
+            create_response: true,
+            interrupt_response: true,
           };
 
     const instructions = `${
-      currentAgent?.instructions ||
-      ""
+      currentAgent?.instructions || ""
     }
 
 - 當問題需要公司/內部文件或知識庫內容時，請先使用 file_search 檢索向量庫，並在回答中附上來源。
@@ -22843,22 +22582,25 @@ function AppContent() {
         properties: {
           query: {
             type: "string",
-            description:
-              "Search query",
+            description: "Search query",
           },
 
           recency_days: {
             type: "integer",
+
             description:
               "Prefer results within N days",
+
             default: 30,
           },
 
           domains: {
             type: "array",
+
             items: {
               type: "string",
             },
+
             description:
               "Optional allowlist of domains, e.g. ['openai.com','who.int']",
           },
@@ -22875,8 +22617,7 @@ function AppContent() {
     const hasWebSearch =
       baseTools.some(
         (t) =>
-          t?.name ===
-          "web_search"
+          t?.name === "web_search"
       );
 
     const tools =
@@ -22887,40 +22628,28 @@ function AppContent() {
             webSearchTool,
           ];
 
-    /**
-     * 這裡是本次最重要的修正。
-     *
-     * 原本 app.tsx 在 session.update 裡：
-     * 1. threshold 使用 0.5
-     * 2. 沒有 noise_reduction
-     * 3. prefix_padding_ms 是 300
-     * 4. silence_duration_ms 是 800
-     *
-     * 因此前端會把 /api/session 的穩定設定覆蓋掉。
-     */
     const sessionUpdateEvent = {
       type: "session.update",
 
       session: {
         type: "realtime",
-
         instructions,
 
-        output_modalities: [
-          "audio",
-        ],
+        output_modalities: ["audio"],
 
         audio: {
           input: {
-            noise_reduction:
-              INPUT_NOISE_REDUCTION,
+            // 筆電、手機、桌面麥克風使用遠場降噪
+            noise_reduction: {
+              type: "far_field",
+            },
 
             transcription: {
               model:
                 "gpt-4o-transcribe",
 
               prompt:
-                INPUT_TRANSCRIPTION_PROMPT,
+                "The user may speak Mandarin Chinese, English, or Japanese. Preserve the spoken language. If Japanese is spoken, transcribe it as Japanese, not Mandarin.",
             },
 
             turn_detection:
@@ -22929,7 +22658,6 @@ function AppContent() {
         },
 
         tools,
-
         tool_choice: "auto",
       },
     };
@@ -22990,9 +22718,7 @@ function AppContent() {
       const textToSend =
         userText.trim();
 
-      if (!textToSend) {
-        return;
-      }
+      if (!textToSend) return;
 
       cancelAssistantSpeech();
 
@@ -23009,6 +22735,7 @@ function AppContent() {
               {
                 type:
                   "input_text",
+
                 text:
                   textToSend,
               },
@@ -23027,7 +22754,9 @@ function AppContent() {
         {
           content:
             textToSend,
+
           eventId,
+
           timestamp:
             Date.now(),
         };
@@ -23040,9 +22769,8 @@ function AppContent() {
             "response.create",
 
           response: {
-            output_modalities: [
-              "audio",
-            ],
+            output_modalities:
+              ["audio"],
           },
         },
         "(trigger response)"
@@ -23065,10 +22793,7 @@ function AppContent() {
 
       cancelAssistantSpeech();
 
-      setIsPTTUserSpeaking(
-        true
-      );
-
+      setIsPTTUserSpeaking(true);
       setIsListening(true);
 
       sendClientEvent(
@@ -23095,10 +22820,7 @@ function AppContent() {
         return;
       }
 
-      setIsPTTUserSpeaking(
-        false
-      );
-
+      setIsPTTUserSpeaking(false);
       setIsListening(false);
 
       sendClientEvent(
@@ -23115,9 +22837,8 @@ function AppContent() {
             "response.create",
 
           response: {
-            output_modalities: [
-              "audio",
-            ],
+            output_modalities:
+              ["audio"],
           },
         },
         "trigger response PTT"
@@ -23130,7 +22851,6 @@ function AppContent() {
         isOutputAudioBufferActive
       ) {
         cancelAssistantSpeech();
-
         return;
       }
 
