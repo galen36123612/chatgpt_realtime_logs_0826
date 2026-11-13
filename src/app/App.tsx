@@ -22562,9 +22562,13 @@ function AppContent() {
             interrupt_response: true,
           };
 
-    const instructions = `${
-      currentAgent?.instructions || ""
-    }
+    const isFortuneScenario =
+      selectedAgentConfigSet === allAgentSets.simpleExample;
+
+    // 解籤只使用自身 prompt 與籤詩，避免通用檢索指示覆蓋對談規則。
+    const instructions = isFortuneScenario
+      ? currentAgent?.instructions || ""
+      : `${currentAgent?.instructions || ""}
 
 - 當問題需要公司/內部文件或知識庫內容時，請先使用 file_search 檢索向量庫，並在回答中附上來源。
 - 當問題需要最新的外部資訊（新聞、價格、政策、版本更新）時，先呼叫 web_search，再用搜尋結果回答並附上來源。`;
@@ -22620,8 +22624,9 @@ function AppContent() {
           t?.name === "web_search"
       );
 
-    const tools =
-      hasWebSearch
+    const tools = isFortuneScenario
+      ? []
+      : hasWebSearch
         ? baseTools
         : [
             ...baseTools,
@@ -22658,7 +22663,7 @@ function AppContent() {
         },
 
         tools,
-        tool_choice: "auto",
+        tool_choice: isFortuneScenario ? "none" : "auto",
       },
     };
 
